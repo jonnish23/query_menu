@@ -1,0 +1,2030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Query Library Editor</title>
+<style>
+  :root{
+    --bg:#12151b; --panel:#1b1f27; --panel-hi:#232a35; --line:rgba(139,157,178,.16);
+    --line-hi:rgba(139,157,178,.34); --txt:#dfe6ef; --muted:#8a97a8; --faint:#5c6675;
+    --accent:#4db6e6; --accent-dim:rgba(77,182,230,.14); --danger:#e0555f; --warn:#e0b455; --ok:#4ec98a;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.45 var(--sans);}
+  header{position:sticky;top:0;z-index:5;background:linear-gradient(#12151b,#12151bee);
+    border-bottom:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;letter-spacing:.02em;font-weight:700}
+  header h1 .dot{color:var(--accent)}
+  .mode{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);
+        border-radius:999px;padding:2px 10px}
+  .mode.full{color:var(--accent);border-color:var(--accent);background:var(--accent-dim)}
+  .ver{font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .spacer{flex:1 1 auto}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line-hi);background:var(--panel-hi);
+    color:var(--txt);border-radius:4px;padding:5px 10px;transition:.12s}
+  button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  button.primary{border-color:var(--accent);background:var(--accent-dim);color:var(--accent)}
+  button.icon{padding:3px 7px;border-color:var(--line);background:transparent;color:var(--muted);font-family:var(--mono)}
+  button.icon:hover{color:var(--accent);border-color:var(--accent)}
+  button.danger:hover{color:var(--danger);border-color:var(--danger);background:rgba(224,85,95,.12)}
+  main{display:flex;gap:18px;align-items:flex-start;padding:18px;max-width:1600px;margin:0 auto}
+  .col-edit{flex:1 1 auto;min-width:0}
+  .col-out{flex:0 0 470px;position:sticky;top:64px;max-height:calc(100vh - 82px);display:flex;flex-direction:column}
+  @media(max-width:1150px){main{flex-direction:column}.col-out{position:static;flex:1 1 auto;width:100%;max-height:none}}
+
+  details.import{background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-bottom:14px}
+  details.import>summary{cursor:pointer;padding:9px 12px;font-weight:600;list-style:none}
+  details.import>summary::-webkit-details-marker{display:none}
+  details.import>summary::before{content:"▸";color:var(--accent);margin-right:8px;display:inline-block;transition:.12s}
+  details.import[open]>summary::before{transform:rotate(90deg)}
+  .import .pad{padding:0 12px 12px}
+  textarea{width:100%;background:#0e1116;color:var(--txt);border:1px solid var(--line);border-radius:5px;
+    font:11.5px/1.5 var(--mono);padding:9px;resize:vertical}
+  .import textarea{min-height:150px}
+  .msg{font-size:11.5px;margin-top:6px;min-height:16px}
+  .msg.err{color:var(--danger)} .msg.ok{color:var(--ok)}
+
+  .tabs{display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+  .tab{padding:7px 13px;cursor:pointer;color:var(--muted);border:1px solid transparent;border-bottom:none;
+       border-radius:5px 5px 0 0;font-size:12.5px;user-select:none}
+  .tab:hover{color:var(--txt)}
+  .tab.on{color:var(--accent);border-color:var(--line);border-bottom-color:var(--bg);background:var(--panel);margin-bottom:-1px}
+  .tab .n{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-left:6px}
+  .pane{display:none} .pane.on{display:block}
+
+  .tree{display:flex;flex-direction:column;gap:6px}
+  .row{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
+    border-radius:5px;padding:7px 8px}
+  .row.q{border-left:2px solid transparent}
+  .row.q:hover{border-left-color:var(--accent)}
+  .handle{cursor:grab;color:var(--faint);font-family:var(--mono);user-select:none;padding:0 2px}
+  .handle:active{cursor:grabbing}
+  input[type=text]{background:#0e1116;border:1px solid var(--line);border-radius:4px;color:var(--txt);
+    font:12px var(--sans);padding:5px 7px;min-width:0}
+  input.name{flex:0 0 140px;font-weight:600}
+  input.url{flex:1 1 auto;font-family:var(--mono);font-size:11.5px}
+  select.xform{background:#0e1116;border:1px solid var(--line);color:var(--muted);border-radius:4px;
+    font:11px var(--mono);padding:4px;flex:0 0 150px}
+  select.xform.set{color:var(--accent);border-color:var(--accent)}
+  .rawwrap{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:11px;user-select:none;white-space:nowrap}
+  button.fillbtn{padding:3px 8px;border-color:var(--line);background:transparent;color:var(--muted);font-family:var(--mono);font-size:11px}
+  button.fillbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  .qwrap{display:flex;flex-direction:column;gap:0}
+  .fillpanel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 0 26px;padding:8px 10px;
+    background:var(--panel);border:1px solid var(--line);border-top:none;border-radius:0 0 5px 5px;font-size:11.5px;color:var(--muted)}
+  .fillpanel .lbl{color:var(--faint);font-family:var(--mono);font-size:10.5px}
+  .fillpanel input{background:#0e1116;border:1px solid var(--line);color:var(--txt);border-radius:4px;font:11px var(--mono);padding:4px 6px}
+  .fillpanel input.fin{flex:1 1 180px;min-width:120px} .fillpanel input.fbn{flex:1 1 180px;min-width:120px}
+  .fillpanel select{background:#0e1116;border:1px solid var(--line);color:var(--txt);border-radius:4px;font:11px var(--mono);padding:3px}
+  .fillpanel .rm{color:var(--danger);cursor:pointer;font-family:var(--mono);font-size:11px;white-space:nowrap}
+  .fillpanel .hint{flex-basis:100%;color:var(--faint);font-size:10.5px}
+  select{background:#0e1116;border:1px solid var(--line);color:var(--muted);border-radius:4px;font:11px var(--sans);padding:4px}
+  .warn{color:var(--warn);font-size:14px;cursor:help}
+  /* runs-on selector: text / url / both (or inherit inside a folder) */
+  select.on{font:11px var(--mono);padding:4px;flex:0 0 auto;border-color:var(--line)}
+  select.on.t-text{color:#c39bf0;border-color:rgba(195,155,240,.55)}
+  select.on.t-url{color:var(--ok);border-color:rgba(78,201,138,.55)}
+  select.on.t-both{color:var(--txt);border-color:var(--line-hi)}
+  select.on.t-inherit{color:var(--faint)}
+  .fon{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;white-space:nowrap}
+  .qfilter{display:flex;align-items:center;gap:6px;margin-bottom:10px;color:var(--muted);font-size:11.5px}
+  .qfilter button{padding:3px 10px;font-size:11.5px;border-color:var(--line);background:transparent;color:var(--muted)}
+  .qfilter button.on{border-color:var(--accent);background:var(--accent-dim);color:var(--accent)}
+  .qfilter .tally{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .import-row{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+  .import-row label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11.5px;margin-left:auto}
+  .folder{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .folder>.fhead{display:flex;align-items:center;gap:8px;padding:8px;background:var(--panel-hi);border-bottom:1px solid var(--line)}
+  .ficon{color:var(--accent);display:flex}
+  input.fname{flex:0 0 200px;font-weight:700}
+  .fcount{color:var(--faint);font-family:var(--mono);font-size:11px}
+  .fbody{padding:8px;display:flex;flex-direction:column;gap:6px}
+  .fbody.collapsed{display:none}
+  .fbody .row.q{margin-left:14px;border-left:1px solid var(--line);border-radius:0 5px 5px 0}
+  .empty{color:var(--faint);font-size:11.5px;padding:8px 10px;border:1px dashed var(--line);border-radius:5px;text-align:center}
+  .addbar{display:flex;gap:8px;margin-top:10px}
+
+  /* transforms */
+  .xf{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;
+      display:flex;gap:8px;align-items:flex-start;border-left:2px solid transparent}
+  .xf:hover{border-left-color:var(--accent)}
+  .xf-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .xf-top{display:flex;gap:8px;align-items:center}
+  input.xfname{flex:0 0 220px;font-family:var(--mono);font-weight:600;color:var(--accent)}
+  textarea.xfcom{flex:1 1 auto;font:11px/1.4 var(--mono);color:var(--muted);min-height:26px;padding:4px 7px;resize:vertical}
+  .xf textarea.code{min-height:56px;font:11.5px/1.5 var(--mono)}
+  .xf-out{font-family:var(--mono);font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .xf-out b{color:var(--ok);font-weight:400}
+  .xf-out.err{color:var(--danger)}
+  .tester{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);
+          border-radius:6px;padding:8px;margin-bottom:10px}
+  .tester label{color:var(--muted);font-size:11.5px;white-space:nowrap}
+  .tester input{flex:1 1 auto;font-family:var(--mono)}
+
+  .bm{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;
+      display:flex;gap:8px;align-items:flex-start;border-left:2px solid transparent}
+  .bm:hover{border-left-color:var(--accent)}
+  .bm.rec{border-left-color:var(--ok)}
+  .bm-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .bm-top{display:flex;gap:8px;align-items:center}
+  input.bmname{flex:0 0 220px;font-weight:600}
+  input.bmmatch{flex:1 1 auto;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  input.bmmatch.set{color:var(--accent)}
+  .bm textarea.code{min-height:64px;font:11.5px/1.5 var(--mono)}
+  .bm-flag{font-family:var(--mono);font-size:10.5px;flex:0 0 auto}
+  .bm-flag.ok{color:var(--ok)} .bm-flag.err{color:var(--danger)} .bm-flag.off{color:var(--faint)}
+  .passthru{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px}
+  .passthru h3{margin:0 0 6px;font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.1em}
+  .passthru p{color:var(--muted);font-size:11.5px;margin:0 0 8px}
+  .passthru textarea{min-height:180px;color:var(--muted)}
+
+  .drop-before{box-shadow:0 -2px 0 var(--accent)}
+  .drop-after{box-shadow:0 2px 0 var(--accent)}
+  .dragging{opacity:.4}
+  .droptarget{border-color:var(--accent)!important;background:var(--accent-dim)}
+
+  .out-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .out-head h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin:0}
+  .out-opts{display:flex;gap:14px;align-items:center;margin-bottom:8px;color:var(--muted);font-size:11.5px;flex-wrap:wrap}
+  .out-opts label{display:flex;align-items:center;gap:5px}
+  #out{flex:1 1 auto;min-height:300px}
+  .issues{margin-top:8px;font-size:11.5px;color:var(--warn);min-height:16px}
+  .hint{color:var(--faint);font-size:11px;margin-top:8px;line-height:1.5}
+  code{font-family:var(--mono);background:#0e1116;padding:1px 5px;border-radius:3px;border:1px solid var(--line)}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel-hi);
+    border:1px solid var(--accent);color:var(--accent);padding:8px 14px;border-radius:6px;opacity:0;
+    transition:.2s;pointer-events:none;font-size:12px}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Query Library <span class="dot">Editor</span></h1>
+  <span class="ver" title="Fill queries work in the menu and the launcher; launchers have the Open URLs and Downloads sections">version 3.6</span>
+  <span class="mode" id="modeBadge">queries only</span>
+  <span class="spacer"></span>
+  <button id="loadSample">Load sample</button>
+  <button id="clearAll" class="danger">Clear</button>
+</header>
+
+<main>
+  <section class="col-edit">
+    <details class="import" id="importDetails" open>
+      <summary>Paste your config block to import</summary>
+      <div class="pad">
+        <textarea id="importText" placeholder="Paste EVERYTHING between the two banners of your userscript:
+
+    // ============================================================
+    // ============  CONFIGURE YOUR QUERIES HERE  =================
+    // ============================================================
+    ...
+    const QUERIES = [ ... ];
+    const TRANSFORMS = { ... };
+    const BOOKMARKLETS = [ ... ];
+    const URL_PARTS = [ ... ];
+    const MODIFIER = 'ctrlKey';
+    ...
+    // ============================================================
+    // ==============  END OF CONFIGURATION  ======================
+    // ============================================================
+
+QUERIES, TRANSFORMS and BOOKMARKLETS become editable below; everything else (URL_PARTS,
+behavior options, comments) is preserved untouched and written back on export.
+
+Moving to the merged Query Menu script: paste its config block, then paste the old
+Text Query Menu and URL Query Menu blocks. Their queries are tagged text / url
+automatically, and a query found in both becomes \"both\".
+
+You can also paste just the QUERIES array on its own.
+
+Import APPENDS to what is already loaded, so you can build one library from several
+scripts (e.g. the URL menu and the Text menu) and export a single launcher homepage.
+Folders with the same name are merged; identical queries and already-defined
+transforms are skipped. Use “Replace all” to start over."></textarea>
+        <div class="import-row">
+          <button class="primary" id="importBtn">Import (append)</button>
+          <button id="importReplace" title="Discard what is loaded and import this block instead">Replace all</button>
+          <label title="Applies only to imported queries and folders that don't already say what they run on">
+            untagged queries run on
+            <select id="importOn">
+              <option value="auto" selected>detect from script</option>
+              <option value="text">text</option>
+              <option value="url">url</option>
+              <option value="both">both</option>
+            </select>
+          </label>
+        </div>
+        <div class="msg" id="importMsg"></div>
+      </div>
+    </details>
+
+    <div class="tabs">
+      <div class="tab on" data-pane="pane-q">Queries <span class="n" id="cntQ">0</span></div>
+      <div class="tab" data-pane="pane-x">Transforms <span class="n" id="cntX">0</span></div>
+      <div class="tab" data-pane="pane-b">Bookmarklets <span class="n" id="cntB">0</span></div>
+      <div class="tab" data-pane="pane-o">Other config</div>
+    </div>
+
+    <div class="pane on" id="pane-q">
+      <div class="qfilter" id="qfilter">
+        show
+        <button data-f="all" class="on">All</button>
+        <button data-f="text" title="Queries that run on selected text (text + both)">Text</button>
+        <button data-f="url" title="Queries that run on a URL (url + both)">URL</button>
+        <span class="tally" id="qtally"></span>
+      </div>
+      <div class="tree" id="tree"></div>
+      <div class="addbar">
+        <button id="addQuery">+ Query</button>
+        <button id="addFolder">+ Folder</button>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-x">
+      <div class="tester">
+        <label>test value</label>
+        <input type="text" id="testVal" value="46.5197, 6.6323" placeholder="type a value to see each transform's output">
+      </div>
+      <div class="tree" id="xtree"></div>
+      <div class="addbar">
+        <button id="addXf">+ Transform</button>
+        <button id="addXfCoord">+ coordinate swap</button>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-b">
+      <div class="tester">
+        <label>test URL</label>
+        <input type="text" id="testUrl" value="https://x.com/home" placeholder="see which bookmarklets would be recommended">
+        <span class="tcount" id="recCount"></span>
+      </div>
+      <div class="tree" id="btree"></div>
+      <div class="addbar">
+        <button id="addBm">+ Bookmarklet</button>
+        <button id="addBmFolder">+ Folder</button>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-o">
+      <div class="passthru">
+        <h3>Preserved verbatim</h3>
+        <p>Everything else from your config block — banners, comments, <code>URL_PARTS</code>,
+           behavior options — is kept exactly as pasted and written back around the parts you
+           edit. Edit here only if you want to change it by hand.</p>
+        <label style="color:var(--muted);font-size:11.5px">before QUERIES</label>
+        <textarea id="pre"></textarea>
+        <label style="color:var(--muted);font-size:11.5px">between QUERIES and TRANSFORMS</label>
+        <textarea id="mid" style="min-height:70px"></textarea>
+        <label style="color:var(--muted);font-size:11.5px">after TRANSFORMS</label>
+        <textarea id="suf"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <aside class="col-out">
+    <div class="out-head">
+      <h2>Export</h2>
+      <span class="spacer"></span>
+      <button class="primary" id="copyBtn">Copy</button>
+      <button id="downloadBtn" title="Download as .txt">Download</button>
+      <button id="homeBtn" title="Export a standalone launcher page for these queries">Homepage ↗</button>
+    </div>
+    <div class="out-opts">
+      <label title="Export the whole config block, or only the QUERIES array">
+        scope
+        <select id="optScope">
+          <option value="full">full config block</option>
+          <option value="queries">QUERIES only</option>
+          <option value="bookmarklets">BOOKMARKLETS only</option>
+        </select>
+      </label>
+      <label id="markerWrap" title="Only used for the QUERIES-only scope"><input type="checkbox" id="optMarkers" checked> markers</label>
+      <label>indent
+        <select id="optIndent">
+          <option value="4" selected>inside function (4 sp)</option>
+          <option value="0">top level (0 sp)</option>
+        </select>
+      </label>
+    </div>
+    <textarea id="out" readonly></textarea>
+    <div class="issues" id="issues"></div>
+    <div class="hint">
+      Paste the result back into your userscript — the config block between the banners, and the
+      BOOKMARKLETS section between its own markers. Made for the merged <b>Query Menu</b>
+      script; each query's <code>on</code> setting (text / url / both) is written into
+      QUERIES. Whatever else you pasted in (URL_PARTS, options…) comes back out unchanged.
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     STATE
+     ============================================================ */
+  var data = [];        // queries tree
+  var xforms = [];      // [{_id,name,code,comment}]
+  var bms = [];         // bookmarklet tree: {name,code,matchSrc} | {folder,bookmarklets:[...]}
+  var parts = { mode:"queries", pre:"", mid:"\n    // ---- VALUE TRANSFORMATIONS ----\n", bmGap:"", suf:"", hadBms:false, source:"" };
+  var qFilter = "all";  // queries tab filter: all | text | url
+  var _n = 0;
+  function uid(){ return "i"+(++_n); }
+  function isFolder(it){ return it && Array.isArray(it.queries); }
+  function isBmFolder(it){ return it && Array.isArray(it.bookmarklets); }
+
+  /* ============================================================
+     SOURCE SCANNING  (comment / string / regex aware)
+     ============================================================ */
+  // Returns index of the bracket matching the one at s[i].
+  function matchBracket(s, i){
+    var open = s[i], close = (open === "[") ? "]" : "}";
+    var d = 0, inS = null, inC = null, prev = "";
+    for(var k = i; k < s.length; k++){
+      var c = s[k], n = s[k+1];
+      if(inC){ if(inC === "//" && c === "\n") inC = null;
+               else if(inC === "/*" && c === "*" && n === "/"){ inC = null; k++; } continue; }
+      if(inS){ if(c === "\\"){ k++; continue; } if(c === inS) inS = null; continue; }
+      if(c === "/" && n === "/"){ inC = "//"; k++; continue; }
+      if(c === "/" && n === "*"){ inC = "/*"; k++; continue; }
+      if(c === "'" || c === '"' || c === "`"){ inS = c; continue; }
+      if(c === "/" && (prev === "" || "(,=:[!&|?{};+-*%<>~^".indexOf(prev) !== -1)){
+        var k2 = k + 1, cls = false;
+        for(; k2 < s.length; k2++){
+          var cc = s[k2];
+          if(cc === "\\"){ k2++; continue; }
+          if(cc === "[") cls = true; else if(cc === "]") cls = false;
+          else if(cc === "/" && !cls) break;
+          else if(cc === "\n") break;
+        }
+        k = k2; continue;
+      }
+      if(c === open) d++;
+      else if(c === close){ d--; if(d === 0) return k; }
+      if(!/\s/.test(c)) prev = c;
+    }
+    return -1;
+  }
+
+  // Locate `const NAME = [` / `{`  -> {open, close} indices of the literal.
+  function findDecl(src, name, bracket){
+    var re = new RegExp("(?:^|\\n)\\s*(?:const|let|var)\\s+" + name + "\\s*=\\s*\\" + bracket);
+    var m = re.exec(src);
+    if(!m) return null;
+    var open = src.indexOf(bracket, m.index);
+    var close = matchBracket(src, open);
+    if(close < 0) return null;
+    return { declStart: m.index + (m[0][0] === "\n" ? 1 : 0), open: open, close: close };
+  }
+
+  // Split the TRANSFORMS object body into entries, keeping leading comments.
+  function parseTransformEntries(objSrc){
+    var s = objSrc, i = s.indexOf("{") + 1, end = s.length - 1;
+    var out = [], comment = [];
+    function skipWs(){
+      while(i < end){
+        var c = s[i];
+        if(/\s/.test(c)){ i++; continue; }
+        if(c === "," ){ i++; continue; }
+        if(c === "/" && s[i+1] === "/"){
+          var e = s.indexOf("\n", i); if(e < 0) e = end;
+          comment.push(s.slice(i+2, e).trim()); i = e; continue;
+        }
+        if(c === "/" && s[i+1] === "*"){
+          var e2 = s.indexOf("*/", i); if(e2 < 0) e2 = end;
+          comment.push(s.slice(i+2, e2).trim()); i = e2 + 2; continue;
+        }
+        break;
+      }
+    }
+    while(i < end){
+      skipWs();
+      if(i >= end) break;
+      // key
+      var key = "", q = s[i];
+      if(q === "'" || q === '"'){
+        i++;
+        while(i < end && s[i] !== q){ if(s[i] === "\\"){ key += s[i+1]; i += 2; } else key += s[i++]; }
+        i++;
+      } else {
+        while(i < end && /[\w$]/.test(s[i])) key += s[i++];
+      }
+      // colon
+      while(i < end && s[i] !== ":") i++;
+      i++;
+      // value: read until a top-level comma (or the closing brace)
+      while(i < end && /\s/.test(s[i])) i++;
+      var vs = i, d = 0, inS = null, inC = null, prev = "";
+      for(; i < end; i++){
+        var c = s[i], n = s[i+1];
+        if(inC){ if(inC === "//" && c === "\n") inC = null;
+                 else if(inC === "/*" && c === "*" && n === "/"){ inC = null; i++; } continue; }
+        if(inS){ if(c === "\\"){ i++; continue; } if(c === inS) inS = null; continue; }
+        if(c === "/" && n === "/"){ inC = "//"; i++; continue; }
+        if(c === "/" && n === "*"){ inC = "/*"; i++; continue; }
+        if(c === "'" || c === '"' || c === "`"){ inS = c; continue; }
+        if(c === "/" && (prev === "" || "(,=:[!&|?{};+-*%<>~^".indexOf(prev) !== -1)){
+          var j = i + 1, cls = false;
+          for(; j < end; j++){ var cc = s[j];
+            if(cc === "\\"){ j++; continue; }
+            if(cc === "[") cls = true; else if(cc === "]") cls = false;
+            else if(cc === "/" && !cls) break; else if(cc === "\n") break; }
+          i = j; continue;
+        }
+        if("([{".indexOf(c) !== -1) d++;
+        else if(")]}".indexOf(c) !== -1) d--;
+        else if(c === "," && d === 0) break;
+        if(!/\s/.test(c)) prev = c;
+      }
+      var code = s.slice(vs, i).trim();
+      if(key) out.push({ _id:uid(), name:key, code:code, comment:comment.join("\n") });
+      comment = [];
+      i++; // past the comma
+    }
+    return out;
+  }
+
+  /* ============================================================
+     IMPORT
+     ============================================================ */
+  /* ---- what a query runs on: 'text' | 'url' | 'both' ('' on a folder child = inherit) ---- */
+  function normOn(v){
+    v = String(v==null?"":v).trim().toLowerCase();
+    return (v === "text" || v === "url" || v === "both") ? v : "";
+  }
+  function effOn(q, fol){ return q.on || (fol && fol.on) || "both"; }
+  // Children that say the same as their folder go back to "inherit".
+  function tidyFolder(fol){
+    if(!fol.queries.length) return;
+    var first = effOn(fol.queries[0], fol);
+    var same = fol.queries.every(function(q){ return effOn(q, fol) === first; });
+    if(same) fol.on = first;
+    fol.queries.forEach(function(q){ if(q.on === fol.on) q.on = ""; });
+  }
+  // Which script a pasted block came from, to tag queries that have no `on` yet.
+  function detectSource(text){
+    var parts_ = /\bconst\s+URL_PARTS\b/.test(text),
+        ws = /\bCOLLAPSE_WHITESPACE\b/.test(text),
+        merged = /\bHANDLE_TEXT\b/.test(text);
+    if(merged) return { kind:"merged", on:"both", label:"Query Menu (merged)" };
+    if(parts_ && !ws) return { kind:"url", on:"url", label:"URL Query Menu" };
+    if(ws && !parts_) return { kind:"text", on:"text", label:"Text Query Menu" };
+    return { kind:"unknown", on:"both", label:"" };
+  }
+
+  function normSubmit(v){ v=String(v==null?"":v).trim().toLowerCase(); return (v==="click"||v==="form"||v==="enter")?v:""; }
+  function normFill(f){
+    if(!f || typeof f !== "object") return null;
+    var input = String(f.input==null?"":f.input).trim();
+    if(!input) return null;
+    return { input:input, button:String(f.button==null?"":f.button).trim(), submit:normSubmit(f.submit) };
+  }
+  function normalizeItems(arr, defOn){
+    defOn = normOn(defOn) || "both";
+    var out = [];
+    arr.forEach(function(it){
+      if(it && Array.isArray(it.queries)){
+        var fol = { _id:uid(), folder:String(it.folder==null?"":it.folder), _collapsed:false,
+          on: normOn(it.on) || defOn,
+          queries: it.queries.filter(function(q){return q && q.url;}).map(function(q){
+            return { _id:uid(), name:String(q.name==null?"":q.name), url:String(q.url),
+                     raw:!!q.raw, transform:xfIn(q.transform), on:normOn(q.on), fill:normFill(q.fill) };
+          })};
+        fol.queries.forEach(function(q){ if(q.on === fol.on) q.on = ""; });
+        out.push(fol);
+      } else if(it && it.url){
+        out.push({ _id:uid(), name:String(it.name==null?"":it.name), url:String(it.url),
+                   raw:!!it.raw, transform:xfIn(it.transform), on:normOn(it.on) || defOn, fill:normFill(it.fill) });
+      }
+    });
+    return out;
+  }
+  // transform may be a string or array (chained). Names can contain commas,
+  // so the editor joins chains with a pipe.
+  function xfIn(t){
+    if(!t) return "";
+    if(Array.isArray(t)) return t.filter(Boolean).join(" | ");
+    return String(t);
+  }
+  function xfOut(str){
+    var p = String(str||"").split("|").map(function(x){return x.trim();}).filter(Boolean);
+    if(!p.length) return null;
+    return p.length === 1 ? p[0] : p;
+  }
+
+
+  /* ---- bookmarklet match values: keep them as JS source so regexes survive ---- */
+  function matchToSrc(m){
+    if(m === undefined || m === null || m === "") return "";
+    function one(x){
+      if(x instanceof RegExp) return String(x);
+      if(typeof x === "function") return String(x);
+      return ql(String(x));
+    }
+    if(Array.isArray(m)) return "[" + m.map(one).join(", ") + "]";
+    return one(m);
+  }
+  function matchOk(srcTxt){
+    var t = String(srcTxt||"").trim();
+    if(!t) return true;
+    try { (new Function("return (" + t + ")"))(); return true; } catch(e){ return false; }
+  }
+  function matchTest(srcTxt, urlStr){
+    var t = String(srcTxt||"").trim();
+    if(!t) return false;
+    var u; try { u = new URL(urlStr); } catch(_) { return false; }
+    var v; try { v = (new Function("return (" + t + ")"))(); } catch(_) { return false; }
+    var list = Array.isArray(v) ? v : [v];
+    return list.some(function(x){
+      try{
+        if(typeof x === "function") return !!x(u);
+        if(x instanceof RegExp) return x.test(u.href);
+        var q = String(x).toLowerCase();
+        return u.hostname.toLowerCase().indexOf(q) !== -1 || u.href.toLowerCase().indexOf(q) !== -1;
+      }catch(_){ return false; }
+    });
+  }
+  function normalizeBms(arr){
+    var out = [];
+    (arr||[]).forEach(function(it){
+      if(it && Array.isArray(it.bookmarklets)){
+        out.push({ _id:uid(), folder:String(it.folder==null?"":it.folder), _collapsed:false,
+          bookmarklets: it.bookmarklets.filter(function(b){ return b && b.code; }).map(function(b){
+            return { _id:uid(), name:String(b.name==null?"":b.name), code:String(b.code), matchSrc:matchToSrc(b.match) };
+          })});
+      } else if(it && it.code){
+        out.push({ _id:uid(), name:String(it.name==null?"":it.name), code:String(it.code), matchSrc:matchToSrc(it.match) });
+      }
+    });
+    return out;
+  }
+  function flatBms(){
+    var o = [];
+    bms.forEach(function(it){
+      if(isBmFolder(it)) it.bookmarklets.forEach(function(b){ o.push({ bm:b, folder:it.folder }); });
+      else o.push({ bm:it, folder:null });
+    });
+    return o;
+  }
+
+  function evalArray(src){
+    var v;
+    try { v = (new Function("return (" + src + ")"))(); }
+    catch(e){ throw new Error("Couldn't parse QUERIES: " + e.message); }
+    if(!Array.isArray(v)) throw new Error("QUERIES is not an array.");
+    return v;
+  }
+
+  // Merge freshly-imported items into what is already loaded.
+  // Folders with the same name are merged; exact duplicate queries are skipped.
+  function mergeIn(items, newXforms, newBms){
+    var stat = { q:0, f:0, fMerged:0, dupQ:0, both:0, x:0, dupX:0, b:0, bf:0, bfMerged:0, dupB:0 };
+    // Same query = same URL template, encoding and transform chain (the name may differ).
+    function sameQ(a,b){
+      return a.url === b.url && !!a.raw === !!b.raw &&
+             String(xfOut(a.transform)) === String(xfOut(b.transform)) &&
+             JSON.stringify(a.fill||null) === JSON.stringify(b.fill||null);
+    }
+
+    items.forEach(function(it){
+      if(isFolder(it)){
+        var key = String(it.folder||"").trim().toLowerCase();
+        var existing = null;
+        data.forEach(function(d){ if(!existing && isFolder(d) && String(d.folder||"").trim().toLowerCase() === key) existing = d; });
+        if(existing){
+          // pin every child's effective value before the folders' defaults get mixed
+          existing.queries.forEach(function(e){ e.on = effOn(e, existing); });
+          it.queries.forEach(function(q){
+            var inOn = effOn(q, it);
+            var ex = null;
+            existing.queries.forEach(function(e){ if(!ex && sameQ(e,q)) ex = e; });
+            if(ex){
+              if(ex.on !== inOn){ ex.on = "both"; stat.both++; } else stat.dupQ++;
+            } else { q.on = inOn; existing.queries.push(q); stat.q++; }
+          });
+          tidyFolder(existing);
+          stat.fMerged++;
+        } else {
+          data.push(it); stat.f++; stat.q += it.queries.length;
+        }
+      } else {
+        var ex2 = null;
+        data.forEach(function(d){ if(!ex2 && !isFolder(d) && sameQ(d,it)) ex2 = d; });
+        if(ex2){
+          if(effOn(ex2) !== effOn(it)){ ex2.on = "both"; stat.both++; } else stat.dupQ++;
+        } else { data.push(it); stat.q++; }
+      }
+    });
+
+    (newXforms||[]).forEach(function(x){
+      var nm = String(x.name||"").trim();
+      if(!nm) return;
+      var exists = xforms.some(function(e){ return String(e.name||"").trim() === nm; });
+      if(exists) stat.dupX++; else { xforms.push(x); stat.x++; }
+    });
+
+    function sameB(a,b){ return a.name === b.name && a.code === b.code; }
+    (newBms||[]).forEach(function(it){
+      if(isBmFolder(it)){
+        var key = String(it.folder||"").trim().toLowerCase(), ex = null;
+        bms.forEach(function(d){ if(!ex && isBmFolder(d) && String(d.folder||"").trim().toLowerCase() === key) ex = d; });
+        if(ex){
+          it.bookmarklets.forEach(function(b){
+            if(ex.bookmarklets.some(function(e){ return sameB(e,b); })) stat.dupB++;
+            else { ex.bookmarklets.push(b); stat.b++; }
+          });
+          stat.bfMerged++;
+        } else { bms.push(it); stat.bf++; stat.b += it.bookmarklets.length; }
+      } else {
+        if(bms.some(function(d){ return !isBmFolder(d) && sameB(d,it); })) stat.dupB++;
+        else { bms.push(it); stat.b++; }
+      }
+    });
+    return stat;
+  }
+
+  function doImport(replace){
+    var msg = document.getElementById("importMsg");
+    var text = document.getElementById("importText").value;
+    try{
+      if(!text.trim()) throw new Error("Nothing to import.");
+      if(replace){ data = []; xforms = []; bms = []; parts = { mode:"queries", pre:"", mid:"\n", bmGap:"", suf:"", hadBms:false, source:"" }; }
+
+      var src = detectSource(text);
+      var pick = document.getElementById("importOn").value;
+      var defOn = pick === "auto" ? src.on : pick;
+
+      var qd = findDecl(text, "QUERIES", "[");
+      var items, newX = [], newB = [], isFull = false, block = null;
+
+      if(qd){
+        var td = findDecl(text, "TRANSFORMS", "{");
+        var bd = findDecl(text, "BOOKMARKLETS", "[");
+        items = normalizeItems(evalArray(text.slice(qd.open, qd.close + 1)), defOn);
+        isFull = true;
+
+        var lastEnd = qd.close, mid = "\n", bmGap = "", hadBms = false;
+        if(td && td.open > qd.close){
+          newX = parseTransformEntries(text.slice(td.open, td.close + 1));
+          mid = text.slice(qd.close + 1, td.declStart).replace(/^;/, "");
+          lastEnd = td.close;
+        }
+        if(bd && bd.open > lastEnd){
+          newB = normalizeBms(evalArray(text.slice(bd.open, bd.close + 1)));
+          bmGap = text.slice(lastEnd + 1, bd.declStart).replace(/^;/, "");
+          lastEnd = bd.close;
+          hadBms = true;
+        }
+        block = { pre: text.slice(0, qd.declStart), mid: mid, bmGap: bmGap,
+                  suf: text.slice(lastEnd + 1).replace(/^;/, ""), hadBms: hadBms };
+      } else {
+        var a = text.indexOf("["), b = text.lastIndexOf("]");
+        if(a < 0 || b < a) throw new Error("Couldn't find a QUERIES declaration or an array [ ... ].");
+        items = normalizeItems(evalArray(text.slice(a, b + 1)), defOn);
+      }
+
+      var stat = mergeIn(items, newX, newB);
+
+      // The surrounding config text can only come from one script; keep the first one seen.
+      // The merged script's block wins over an old script's, whichever is pasted first.
+      var keptFirst = false, switched = false;
+      if(isFull){
+        var takeIt = parts.mode !== "full" ||
+                     (src.kind === "merged" && parts.source !== "merged");
+        if(takeIt){
+          switched = parts.mode === "full";
+          parts.pre = block.pre; parts.mid = block.mid; parts.suf = block.suf;
+          parts.bmGap = block.bmGap; parts.hadBms = block.hadBms;
+          parts.mode = "full"; parts.source = src.kind;
+          document.getElementById("optScope").value = "full";
+        } else keptFirst = true;
+      }
+
+      syncPassthruFields();
+      renderAll();
+
+      var bits = [];
+      if(src.label) bits.push("from " + src.label + (pick === "auto" && src.kind !== "merged" ? " (untagged → " + defOn + ")" : ""));
+      bits.push("+" + stat.q + " quer" + (stat.q === 1 ? "y" : "ies"));
+      if(stat.both) bits.push(stat.both + " quer" + (stat.both === 1 ? "y" : "ies") + " found in both scripts → both");
+      if(switched) bits.push("now using the merged script's surrounding config");
+      if(stat.f) bits.push("+" + stat.f + " folder(s)");
+      if(stat.fMerged) bits.push(stat.fMerged + " folder(s) merged by name");
+      if(stat.x) bits.push("+" + stat.x + " transform(s)");
+      if(stat.b) bits.push("+" + stat.b + " bookmarklet(s)");
+      if(stat.bf) bits.push("+" + stat.bf + " bookmarklet folder(s)");
+      if(stat.dupB) bits.push(stat.dupB + " duplicate bookmarklet(s) skipped");
+      if(stat.dupQ) bits.push(stat.dupQ + " duplicate quer(y/ies) skipped");
+      if(stat.dupX) bits.push(stat.dupX + " transform(s) already defined, skipped");
+      if(keptFirst) bits.push("kept the first config block's surrounding text");
+      bits.push("total: " + data.length + " top-level, " + xforms.length + " transform(s), " + flatBms().length + " bookmarklet(s)");
+
+      msg.className = "msg ok";
+      msg.textContent = (replace ? "Replaced. " : "Appended. ") + bits.join(" · ");
+      document.getElementById("importText").value = "";
+      document.getElementById("importText").focus();
+    }catch(err){
+      msg.className = "msg err"; msg.textContent = err.message;
+    }
+  }
+
+  /* ============================================================
+     EXPORT
+     ============================================================ */
+  var START_MARKER = new Array(33).join("/") + "COPY-PASTE QUERY LIBRARY START";
+  var END_MARKER   = new Array(33).join("/") + "COPY-PASTE QUERY LIBRARY END";
+  function esc(s){ return String(s==null?"":s).replace(/\\/g,"\\\\").replace(/'/g,"\\'"); }
+  function ql(s){ return "'" + esc(s) + "'"; }
+  function baseIndent(){ return new Array((parseInt(document.getElementById("optIndent").value,10)||0)+1).join(" "); }
+
+  function serializeQueries(){
+    var BASE = baseIndent(), STEP = "    ", lines = [];
+    function pad(n){ return BASE + new Array(n+1).join(STEP); }
+    function ser(list, level, fol){
+      var maxNF = 0;
+      list.forEach(function(it){ if(!isFolder(it)){ var nf = ql(it.name)+","; if(nf.length>maxNF) maxNF=nf.length; } });
+      list.forEach(function(it){
+        if(isFolder(it)){
+          lines.push(pad(level) + "{");
+          lines.push(pad(level+1) + "folder: " + ql(it.folder) + ",");
+          lines.push(pad(level+1) + "on: " + ql(it.on || "both") + ",");
+          lines.push(pad(level+1) + "queries: [");
+          ser(it.queries, level+2, it);
+          lines.push(pad(level+1) + "],");
+          lines.push(pad(level) + "},");
+        } else {
+          var nf = ql(it.name) + ",";
+          var padded = nf + new Array(Math.max(0, maxNF-nf.length)+2).join(" ");
+          var line = pad(level) + "{ name: " + padded + "url: " + ql(it.url);
+          if(it.raw) line += ", raw: true";
+          var xf = xfOut(it.transform);
+          if(xf) line += ", transform: " + (Array.isArray(xf) ? "[" + xf.map(ql).join(", ") + "]" : ql(xf));
+          if(it.fill && it.fill.input){
+            var fp = ["input: " + ql(it.fill.input)];
+            if(it.fill.button) fp.push("button: " + ql(it.fill.button));
+            if(it.fill.submit) fp.push("submit: " + ql(it.fill.submit));
+            line += ", fill: { " + fp.join(", ") + " }";
+          }
+          // top-level queries always say what they run on; folder children only when they override
+          if(!fol) line += ", on: " + ql(it.on || "both");
+          else if(it.on && it.on !== fol.on) line += ", on: " + ql(it.on);
+          line += " },";
+          lines.push(line);
+        }
+      });
+    }
+    lines.push(BASE + "const QUERIES = [");
+    ser(data, 1);
+    lines.push(BASE + "];");
+    return lines.join("\n");
+  }
+
+  function reindent(code, indent){
+    var lines = String(code).replace(/\r/g,"").split("\n");
+    if(lines.length === 1) return lines[0].trim();
+    var min = Infinity;
+    lines.slice(1).forEach(function(l){ if(l.trim()){ var k = l.match(/^\s*/)[0].length; if(k<min) min=k; } });
+    if(min === Infinity) min = 0;
+    var out = [lines[0].trim()];
+    lines.slice(1).forEach(function(l){ out.push(l.trim() ? indent + l.slice(min) : ""); });
+    return out.join("\n");
+  }
+
+  function serializeTransforms(){
+    var BASE = baseIndent(), ind = BASE + "    ", lines = [];
+    lines.push(BASE + "const TRANSFORMS = {");
+    xforms.forEach(function(x){
+      if(!x.name.trim()) return;
+      if(x.comment && x.comment.trim()){
+        x.comment.replace(/\r/g,"").split("\n").forEach(function(cl){
+          if(cl.trim()) lines.push(ind + "// " + cl.trim());
+        });
+      }
+      lines.push(ind + ql(x.name) + ": " + reindent(x.code, ind) + ",");
+    });
+    lines.push(BASE + "};");
+    return lines.join("\n");
+  }
+
+  function serializeBookmarklets(){
+    var BASE = baseIndent(), STEP = "    ", lines = [];
+    function pad(n){ return BASE + new Array(n+1).join(STEP); }
+    function one(b, level){
+      lines.push(pad(level) + "{");
+      lines.push(pad(level+1) + "name: " + ql(b.name) + ",");
+      if(String(b.matchSrc||"").trim()) lines.push(pad(level+1) + "match: " + String(b.matchSrc).trim() + ",");
+      lines.push(pad(level+1) + "code: " + JSON.stringify(String(b.code)) + ",");
+      lines.push(pad(level) + "},");
+    }
+    lines.push(BASE + "const BOOKMARKLETS = [");
+    bms.forEach(function(it){
+      if(isBmFolder(it)){
+        lines.push(pad(1) + "{");
+        lines.push(pad(2) + "folder: " + ql(it.folder) + ",");
+        lines.push(pad(2) + "bookmarklets: [");
+        it.bookmarklets.forEach(function(b){ one(b, 3); });
+        lines.push(pad(2) + "],");
+        lines.push(pad(1) + "},");
+      } else one(it, 1);
+    });
+    lines.push(BASE + "];");
+    return lines.join("\n");
+  }
+
+  var BM_START = new Array(33).join("/") + "COPY-PASTE BOOKMARKLET LIBRARY START";
+  var BM_END   = new Array(33).join("/") + "COPY-PASTE BOOKMARKLET LIBRARY END";
+
+  function buildOutput(){
+    var scope = document.getElementById("optScope").value;
+    if(scope === "full" && parts.mode === "full"){
+      var B = baseIndent();
+      var out = parts.pre + serializeQueries();
+      if(xforms.length === 0) out += parts.mid.replace(/\n?\s*\/\/ ---- VALUE TRANSFORMATIONS ----\n?/, "\n");
+      else out += parts.mid + serializeTransforms();
+      if(bms.length){
+        // reuse the original gap when the block already had a bookmarklet section,
+        // otherwise add a marked section of its own before the rest of the config
+        out += parts.hadBms ? parts.bmGap
+             : ("\n\n" + B + BM_START + "\n");
+        out += serializeBookmarklets();
+        if(!parts.hadBms) out += "\n" + B + BM_END + "\n";
+      }
+      return out + parts.suf;
+    }
+    if(scope === "bookmarklets"){
+      var B2 = baseIndent(), body = serializeBookmarklets();
+      if(document.getElementById("optMarkers").checked) body = B2 + BM_START + "\n" + body + "\n" + B2 + BM_END;
+      return body;
+    }
+    var body = serializeQueries();
+    if(document.getElementById("optMarkers").checked){
+      var B = baseIndent();
+      body = B + START_MARKER + "\n" + body + "\n" + B + END_MARKER;
+    }
+    return body;
+  }
+
+  function collectIssues(){
+    var names = {};
+    xforms.forEach(function(x){ if(x.name.trim()) names[x.name.trim()] = 1; });
+    var unknown = {}, noPlaceholder = 0;
+    function visit(q){
+      if(!q.fill && String(q.url||"").indexOf("%s") === -1) noPlaceholder++;
+      var xf = xfOut(q.transform);
+      if(xf){ (Array.isArray(xf)?xf:[xf]).forEach(function(n){ if(!names[n]) unknown[n]=1; }); }
+    }
+    data.forEach(function(it){ if(isFolder(it)) it.queries.forEach(visit); else visit(it); });
+    return { unknown:Object.keys(unknown), noPlaceholder:noPlaceholder };
+  }
+
+  function updateExport(){
+    document.getElementById("out").value = buildOutput();
+    var is = collectIssues(), m = [];
+    if(is.unknown.length) m.push("⚠ transform(s) not defined in TRANSFORMS: " + is.unknown.join(", "));
+    if(is.noPlaceholder) m.push("⚠ " + is.noPlaceholder + " query URL(s) without %s");
+    if(parts.mode === "full" && (parts.source === "text" || parts.source === "url"))
+      m.push("⚠ the surrounding config comes from the old " + (parts.source === "text" ? "Text" : "URL") +
+             " Query Menu. Paste the merged Query Menu config block too, so the export fits the new script.");
+    document.getElementById("issues").textContent = m.join("   ");
+    document.getElementById("cntQ").textContent = data.length;
+    document.getElementById("cntX").textContent = xforms.length;
+    document.getElementById("modeBadge").textContent = parts.mode === "full" ? "full config block" : "queries only";
+    document.getElementById("modeBadge").className = "mode" + (parts.mode === "full" ? " full" : "");
+    var sc = document.getElementById("optScope").value;
+    document.getElementById("markerWrap").style.opacity = (sc === "full") ? ".4" : "1";
+    document.getElementById("cntB").textContent = flatBms().length;
+  }
+
+  /* ============================================================
+     DOM helpers
+     ============================================================ */
+  function el(tag, cls, attrs){
+    var e = document.createElement(tag);
+    if(cls) e.className = cls;
+    if(attrs) for(var k in attrs){ if(k === "text") e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    return e;
+  }
+  function arrOf(f){ return f === -1 ? data : (data[f] ? data[f].queries : null); }
+  function swap(f,i,j){ var a=arrOf(f); if(!a||j<0||j>=a.length) return; var t=a[i]; a[i]=a[j]; a[j]=t; renderAll(); }
+  function moveItem(src, dest){
+    var sa = arrOf(src.f); if(!sa) return;
+    var item = sa[src.i]; if(!item) return;
+    if(isFolder(item) && dest.f !== -1) return;
+    var da = arrOf(dest.f); if(!da) return;
+    var di = dest.i;
+    if(!isFolder(item) && src.f !== dest.f){
+      var eff = effOn(item, src.f === -1 ? null : data[src.f]);
+      var destFol = dest.f === -1 ? null : data[dest.f];
+      item.on = (destFol && eff === (destFol.on || "both")) ? "" : eff;
+    }
+    sa.splice(src.i,1);
+    if(sa === da && src.i < di) di--;
+    di = Math.max(0, Math.min(di, da.length));
+    da.splice(di,0,item);
+    renderAll();
+  }
+  var FOLDER_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2.2h7A1.5 1.5 0 0 1 19 8.7V17.5A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z"/><path d="M6.4 12.2h7.2M6.4 14.8h4.6" opacity=".6"/></svg>';
+
+  /* ---- drag & drop ---- */
+  var dragSrc = null, pendingDest = null;
+  function clearIndicators(){
+    [].forEach.call(document.querySelectorAll(".drop-before,.drop-after,.droptarget"), function(n){
+      n.classList.remove("drop-before","drop-after","droptarget"); });
+  }
+  function makeDraggable(handle, node, loc){
+    handle.setAttribute("draggable","true");
+    handle.addEventListener("dragstart", function(e){
+      dragSrc = loc; node.classList.add("dragging");
+      try{ e.dataTransfer.setData("text/plain",""); e.dataTransfer.effectAllowed="move"; e.dataTransfer.setDragImage(node,12,12); }catch(_){}
+    });
+    handle.addEventListener("dragend", function(){ node.classList.remove("dragging"); clearIndicators(); dragSrc=null; pendingDest=null; });
+  }
+  function rowDropTarget(node, loc){
+    node.addEventListener("dragover", function(e){
+      if(!dragSrc) return; e.preventDefault(); e.dataTransfer.dropEffect="move";
+      var r = node.getBoundingClientRect(), after = (e.clientY - r.top) > r.height/2;
+      clearIndicators(); node.classList.add(after?"drop-after":"drop-before");
+      pendingDest = { f: loc.f, i: loc.i + (after?1:0) };
+    });
+    node.addEventListener("drop", function(e){
+      if(!dragSrc || !pendingDest) return; e.preventDefault(); e.stopPropagation();
+      var s=dragSrc, d=pendingDest; clearIndicators(); moveItem(s,d);
+    });
+  }
+  function zoneDropTarget(node, destFn){
+    node.addEventListener("dragover", function(e){ if(!dragSrc) return; e.preventDefault(); clearIndicators(); node.classList.add("droptarget"); pendingDest = destFn(); });
+    node.addEventListener("drop", function(e){ if(!dragSrc||!pendingDest) return; e.preventDefault(); e.stopPropagation(); var s=dragSrc,d=pendingDest; clearIndicators(); moveItem(s,d); });
+  }
+
+  /* ============================================================
+     RENDER — queries
+     ============================================================ */
+  function locationSelect(currentF, onPick){
+    var sel = el("select");
+    sel.appendChild(el("option", null, {value:"-1", text:"Top level"}));
+    data.forEach(function(it, idx){ if(isFolder(it)) sel.appendChild(el("option", null, {value:String(idx), text:"→ "+(it.folder||"folder")})); });
+    sel.value = String(currentF);
+    sel.title = "Move this query to…";
+    sel.addEventListener("change", function(){ onPick(parseInt(sel.value,10)); });
+    return sel;
+  }
+
+  function transformSelect(q){
+    var sel = el("select","xform");
+    sel.title = "Value transformation (from the TRANSFORMS tab)";
+    sel.appendChild(el("option", null, {value:"", text:"— no transform —"}));
+    var cur = (q.transform||"").trim();
+    var seen = {};
+    xforms.forEach(function(x){
+      if(!x.name.trim() || seen[x.name]) return; seen[x.name]=1;
+      sel.appendChild(el("option", null, {value:x.name, text:x.name}));
+    });
+    // keep a value that is not (or no longer) defined, so nothing is silently lost
+    if(cur && !seen[cur]) sel.appendChild(el("option", null, {value:cur, text:cur + "  (undefined)"}));
+    sel.value = cur;
+    sel.classList.toggle("set", !!cur);
+    sel.addEventListener("change", function(){ q.transform = sel.value; sel.classList.toggle("set", !!sel.value); updateExport(); });
+    return sel;
+  }
+
+  var ON_LABEL = { text:"text", url:"url", both:"both" };
+  function paintOn(sel){
+    sel.className = "on t-" + (sel.value || "inherit");
+  }
+  // f === -1 : top-level query; otherwise a child of data[f]
+  function onSelect(q, f){
+    var fol = f === -1 ? null : data[f];
+    var sel = el("select","on");
+    sel.title = "What this query runs on";
+    if(fol) sel.appendChild(el("option", null, {value:"", text:"inherit (" + (fol.on || "both") + ")"}));
+    ["text","url","both"].forEach(function(v){ sel.appendChild(el("option", null, {value:v, text:ON_LABEL[v]})); });
+    sel.value = fol ? (q.on && q.on !== fol.on ? q.on : "") : (q.on || "both");
+    paintOn(sel);
+    sel.addEventListener("change", function(){
+      q.on = sel.value; paintOn(sel);
+      if(qFilter !== "all") renderQueries();
+      updateExport(); updateTally();
+    });
+    return sel;
+  }
+  function fillPanel(q){
+    var panel = el("div","fillpanel");
+    panel.appendChild(el("span","lbl",{text:"box"}));
+    var inp = el("input","fin",{type:"text",placeholder:"#searchbox (CSS selector)"}); inp.value=q.fill.input||"";
+    inp.addEventListener("input", function(){ q.fill.input=inp.value; updateExport(); });
+    panel.appendChild(inp);
+    panel.appendChild(el("span","lbl",{text:"button"}));
+    var btn = el("input","fbn",{type:"text",placeholder:"#go (optional)"}); btn.value=q.fill.button||"";
+    btn.addEventListener("input", function(){ q.fill.button=btn.value; updateExport(); });
+    panel.appendChild(btn);
+    panel.appendChild(el("span","lbl",{text:"submit"}));
+    var sub = el("select"); [["","auto"],["click","click button"],["form","submit form"],["enter","press Enter"]].forEach(function(o){
+      sub.appendChild(el("option",null,{value:o[0],text:o[1]})); });
+    sub.value=q.fill.submit||""; sub.addEventListener("change", function(){ q.fill.submit=sub.value; updateExport(); });
+    panel.appendChild(sub);
+    var rm = el("span","rm",{text:"remove fill",title:"Back to a normal %s query"});
+    rm.onclick=function(){ q.fill=null; q._fillOpen=false; renderAll(); };
+    panel.appendChild(rm);
+    panel.appendChild(el("span","hint",{text:"Opens the URL on the left (no %s needed), then types the value into the box and starts the search. Needs Query Menu 3.5+."}));
+    return panel;
+  }
+  function queryRow(q, f, i){
+    var loc = {f:f,i:i};
+    var wrap = el("div","qwrap",{"data-qi":String(i)});
+    var row = el("div","row q");
+    var handle = el("span","handle",{text:"⠿",title:"Drag to reorder / move"});
+    makeDraggable(handle,row,loc); rowDropTarget(row,loc);
+    row.appendChild(handle);
+
+    var name = el("input","name",{type:"text",placeholder:"Name"}); name.value=q.name;
+    name.addEventListener("input", function(){ q.name=name.value; updateExport(); });
+    row.appendChild(name);
+
+    var url = el("input","url",{type:"text",placeholder:"https://site/?q=%s"}); url.value=q.url;
+    var warn = el("span","warn",{title:"This URL has no %s placeholder",text:"⚠"});
+    function checkWarn(){ warn.style.display = (!q.fill && String(q.url).indexOf("%s")===-1) ? "" : "none"; }
+    url.addEventListener("input", function(){ q.url=url.value; checkWarn(); updateExport(); });
+    row.appendChild(url); row.appendChild(warn); checkWarn();
+
+    row.appendChild(onSelect(q, f));
+    row.appendChild(transformSelect(q));
+
+    var rawWrap = el("label","rawwrap"); var raw = el("input",null,{type:"checkbox"}); raw.checked=!!q.raw;
+    raw.addEventListener("change", function(){ q.raw=raw.checked; updateExport(); });
+    rawWrap.appendChild(raw); rawWrap.appendChild(document.createTextNode("raw"));
+    row.appendChild(rawWrap);
+
+    var fillB = el("button","icon fillbtn"+(q.fill?" on":""),{title:"Type the value into the site's search box instead of putting it in the URL",text:"fill"});
+    fillB.onclick=function(){ if(q.fill){ q._fillOpen=!q._fillOpen; } else { q.fill={input:"",button:"",submit:""}; q._fillOpen=true; } renderAll(); };
+    row.appendChild(fillB);
+
+    row.appendChild(locationSelect(f, function(t){ var da=arrOf(t); moveItem({f:f,i:i},{f:t,i:da?da.length:0}); }));
+
+    var up=el("button","icon",{title:"Move up",text:"↑"}); up.onclick=function(){ swap(f,i,i-1); };
+    var dn=el("button","icon",{title:"Move down",text:"↓"}); dn.onclick=function(){ swap(f,i,i+1); };
+    var del=el("button","icon danger",{title:"Delete",text:"✕"}); del.onclick=function(){ arrOf(f).splice(i,1); renderAll(); };
+    row.appendChild(up); row.appendChild(dn); row.appendChild(del);
+    wrap.appendChild(row);
+    if(q.fill && q._fillOpen) wrap.appendChild(fillPanel(q));
+    return wrap;
+  }
+
+  function folderBlock(fol, f){
+    var wrap = el("div","folder");
+    var head = el("div","fhead");
+    var handle = el("span","handle",{text:"⠿",title:"Drag to reorder folder"});
+    makeDraggable(handle,wrap,{f:-1,i:f}); rowDropTarget(head,{f:-1,i:f});
+    head.appendChild(handle);
+    var icon = el("span","ficon"); icon.innerHTML = FOLDER_SVG; head.appendChild(icon);
+
+    var fname = el("input","fname",{type:"text",placeholder:"Folder name"}); fname.value=fol.folder;
+    fname.addEventListener("input", function(){ fol.folder=fname.value; updateExport(); });
+    head.appendChild(fname);
+
+    head.appendChild(el("span","fcount",{text: fol.queries.length + " queries"}));
+    var fonWrap = el("label","fon",{title:"Default for queries in this folder that are set to inherit"});
+    fonWrap.appendChild(document.createTextNode("runs on"));
+    var fon = el("select","on");
+    ["text","url","both"].forEach(function(v){ fon.appendChild(el("option", null, {value:v, text:ON_LABEL[v]})); });
+    fon.value = fol.on || "both"; paintOn(fon);
+    fon.addEventListener("change", function(){ fol.on = fon.value; renderAll(); });
+    fonWrap.appendChild(fon);
+    head.appendChild(fonWrap);
+    head.appendChild(el("span","spacer"));
+
+    var addQ = el("button","icon",{title:"Add query to folder",text:"+ query"});
+    addQ.onclick=function(){ fol.queries.push({_id:uid(),name:"",url:"",raw:false,transform:"",on:""}); fol._collapsed=false; renderAll(); };
+    head.appendChild(addQ);
+    var coll = el("button","icon",{title:"Collapse / expand",text: fol._collapsed?"▸":"▾"});
+    coll.onclick=function(){ fol._collapsed=!fol._collapsed; renderAll(); };
+    head.appendChild(coll);
+    var up=el("button","icon",{title:"Move up",text:"↑"}); up.onclick=function(){ swap(-1,f,f-1); };
+    var dn=el("button","icon",{title:"Move down",text:"↓"}); dn.onclick=function(){ swap(-1,f,f+1); };
+    var del=el("button","icon danger",{title:"Delete folder",text:"✕"});
+    del.onclick=function(){ if(!fol.queries.length || confirm('Delete folder "'+(fol.folder||"")+'" and its '+fol.queries.length+' queries?')){ data.splice(f,1); renderAll(); } };
+    head.appendChild(up); head.appendChild(dn); head.appendChild(del);
+    wrap.appendChild(head);
+
+    var body = el("div","fbody"+(fol._collapsed?" collapsed":""));
+    if(fol.queries.length === 0){
+      var empty = el("div","empty",{text:"empty — drag a query here or use + query"});
+      zoneDropTarget(empty, function(){ return {f:f,i:0}; });
+      body.appendChild(empty);
+    } else {
+      fol.queries.forEach(function(q,i){ body.appendChild(queryRow(q,f,i)); });
+    }
+    zoneDropTarget(head, function(){ return {f:f,i:fol.queries.length}; });
+    wrap.appendChild(body);
+    return wrap;
+  }
+
+  function passesFilter(q, fol){
+    if(qFilter === "all") return true;
+    var v = effOn(q, fol);
+    return v === qFilter || v === "both";
+  }
+  function updateTally(){
+    var n = { text:0, url:0, both:0 };
+    data.forEach(function(it){
+      if(isFolder(it)) it.queries.forEach(function(q){ n[effOn(q,it)]++; });
+      else n[effOn(it)]++;
+    });
+    document.getElementById("qtally").textContent = n.text + " text · " + n.url + " url · " + n.both + " both";
+  }
+  function renderQueries(){
+    var tree = document.getElementById("tree");
+    tree.innerHTML = "";
+    data.forEach(function(it,idx){
+      if(isFolder(it)){
+        var fb = folderBlock(it,idx);
+        if(qFilter !== "all"){
+          var any = false;
+          it.queries.forEach(function(q,i){
+            var ok = passesFilter(q, it); any = any || ok;
+            var r = fb.querySelector('[data-qi="' + i + '"]');
+            if(r && !ok) r.style.display = "none";
+          });
+          if(!any && it.queries.length) fb.style.display = "none";
+        }
+        tree.appendChild(fb);
+      } else {
+        var r = queryRow(it,-1,idx);
+        if(!passesFilter(it)) r.style.display = "none";
+        tree.appendChild(r);
+      }
+    });
+    updateTally();
+    var end = el("div","empty",{text: data.length ? "drop here to move to the end" : "no queries yet — add one, or import above"});
+    zoneDropTarget(end, function(){ return {f:-1,i:data.length}; });
+    tree.appendChild(end);
+  }
+
+  /* ============================================================
+     RENDER — transforms
+     ============================================================ */
+  function runTransform(x, val){
+    var fn;
+    try { fn = (new Function("return (" + x.code + ")"))(); }
+    catch(e){ return { err:"syntax: " + e.message }; }
+    if(typeof fn !== "function") return { err:"not a function" };
+    try { return { out:String(fn(val)) }; }
+    catch(e){ return { err:"runtime: " + e.message }; }
+  }
+
+  function xfCard(x, i){
+    var card = el("div","xf");
+    var handle = el("span","handle",{text:"⠿",title:"Drag not needed — use ↑ ↓"});
+    handle.style.cursor = "default";
+    card.appendChild(handle);
+
+    var main = el("div","xf-main");
+    var top = el("div","xf-top");
+
+    var nm = el("input","xfname",{type:"text",placeholder:"transform name"}); nm.value = x.name;
+    nm.addEventListener("input", function(){ x.name = nm.value; renderAll(); });
+    top.appendChild(nm);
+
+    var com = el("textarea","xfcom",{placeholder:"comment (optional)",rows:"1"}); com.value = x.comment || "";
+    com.addEventListener("input", function(){ x.comment = com.value; updateExport(); });
+    top.appendChild(com);
+
+    var up=el("button","icon",{title:"Move up",text:"↑"}); up.onclick=function(){ if(i>0){ var t=xforms[i-1]; xforms[i-1]=xforms[i]; xforms[i]=t; renderAll(); } };
+    var dn=el("button","icon",{title:"Move down",text:"↓"}); dn.onclick=function(){ if(i<xforms.length-1){ var t=xforms[i+1]; xforms[i+1]=xforms[i]; xforms[i]=t; renderAll(); } };
+    var del=el("button","icon danger",{title:"Delete",text:"✕"}); del.onclick=function(){ xforms.splice(i,1); renderAll(); };
+    top.appendChild(up); top.appendChild(dn); top.appendChild(del);
+    main.appendChild(top);
+
+    var code = el("textarea","code",{placeholder:"function (v) { return String(v); }"}); code.value = x.code;
+    var outLine = el("div","xf-out");
+    function test(){
+      var val = document.getElementById("testVal").value;
+      var r = runTransform(x, val);
+      if(r.err){ outLine.className = "xf-out err"; outLine.textContent = "✕ " + r.err; }
+      else { outLine.className = "xf-out"; outLine.innerHTML = ""; 
+             outLine.appendChild(document.createTextNode(JSON.stringify(val) + "  →  "));
+             var b = document.createElement("b"); b.textContent = JSON.stringify(r.out); outLine.appendChild(b); }
+    }
+    code.addEventListener("input", function(){ x.code = code.value; test(); updateExport(); });
+    main.appendChild(code);
+    main.appendChild(outLine);
+    card.appendChild(main);
+    x._test = test;
+    return card;
+  }
+
+  function renderTransforms(){
+    var t = document.getElementById("xtree");
+    t.innerHTML = "";
+    if(!xforms.length) t.appendChild(el("div","empty",{text:"no transforms — add one, or import a config block that has a TRANSFORMS registry"}));
+    xforms.forEach(function(x,i){ t.appendChild(xfCard(x,i)); });
+    retest();
+  }
+  function retest(){ xforms.forEach(function(x){ if(typeof x._test === "function") x._test(); }); }
+
+
+  /* ============================================================
+     RENDER — bookmarklets
+     ============================================================ */
+  function bmArrOf(f){ return f === -1 ? bms : (bms[f] ? bms[f].bookmarklets : null); }
+  function bmSwap(f,i,j){ var a=bmArrOf(f); if(!a||j<0||j>=a.length) return; var t=a[i]; a[i]=a[j]; a[j]=t; renderAll(); }
+  function bmLocationSelect(currentF, onPick){
+    var sel = el("select");
+    sel.appendChild(el("option", null, {value:"-1", text:"Top level"}));
+    bms.forEach(function(it, idx){ if(isBmFolder(it)) sel.appendChild(el("option", null, {value:String(idx), text:"→ "+(it.folder||"folder")})); });
+    sel.value = String(currentF);
+    sel.title = "Move this bookmarklet to…";
+    sel.addEventListener("change", function(){ onPick(parseInt(sel.value,10)); });
+    return sel;
+  }
+
+  function bmCard(b, f, i){
+    var card = el("div","bm");
+    var handle = el("span","handle",{text:"⠿",title:"Use ↑ ↓ to reorder"});
+    handle.style.cursor = "default";
+    card.appendChild(handle);
+
+    var main = el("div","bm-main");
+    var top = el("div","bm-top");
+
+    var nm = el("input","bmname",{type:"text",placeholder:"Bookmarklet name"}); nm.value = b.name;
+    nm.addEventListener("input", function(){ b.name = nm.value; updateExport(); });
+    top.appendChild(nm);
+
+    var mt = el("input","bmmatch",{type:"text",placeholder:"match (optional): 'site.com'  /regex/i  ['a','b']"});
+    mt.value = b.matchSrc || "";
+    mt.title = "When the page matches, this appears under RECOMMENDED.\nAccepts a string, a /regex/, an array, or (u) => boolean";
+    var flag = el("span","bm-flag");
+    function refreshFlag(){
+      var t = String(b.matchSrc||"").trim();
+      mt.classList.toggle("set", !!t);
+      if(!t){ flag.className = "bm-flag off"; flag.textContent = "always listed"; return; }
+      if(!matchOk(t)){ flag.className = "bm-flag err"; flag.textContent = "✕ invalid"; return; }
+      var hit = matchTest(t, document.getElementById("testUrl").value);
+      flag.className = "bm-flag " + (hit ? "ok" : "off");
+      flag.textContent = hit ? "★ recommended here" : "no match";
+      card.classList.toggle("rec", hit);
+    }
+    mt.addEventListener("input", function(){ b.matchSrc = mt.value; refreshFlag(); updateExport(); });
+    top.appendChild(mt); top.appendChild(flag);
+
+    top.appendChild(bmLocationSelect(f, function(t){ var da = bmArrOf(t); bmMove({f:f,i:i},{f:t,i:da?da.length:0}); }));
+    var up=el("button","icon",{title:"Move up",text:"↑"}); up.onclick=function(){ bmSwap(f,i,i-1); };
+    var dn=el("button","icon",{title:"Move down",text:"↓"}); dn.onclick=function(){ bmSwap(f,i,i+1); };
+    var del=el("button","icon danger",{title:"Delete",text:"✕"}); del.onclick=function(){ bmArrOf(f).splice(i,1); renderAll(); };
+    top.appendChild(up); top.appendChild(dn); top.appendChild(del);
+    main.appendChild(top);
+
+    var code = el("textarea","code",{placeholder:"javascript:(function(){ ... })();"}); code.value = b.code;
+    code.addEventListener("input", function(){ b.code = code.value; updateExport(); });
+    main.appendChild(code);
+
+    card.appendChild(main);
+    b._refresh = refreshFlag;
+    refreshFlag();
+    return card;
+  }
+
+  function bmMove(src, dest){
+    var sa = bmArrOf(src.f); if(!sa) return;
+    var item = sa[src.i]; if(!item) return;
+    if(isBmFolder(item) && dest.f !== -1) return;
+    var da = bmArrOf(dest.f); if(!da) return;
+    var di = dest.i;
+    sa.splice(src.i,1);
+    if(sa === da && src.i < di) di--;
+    da.splice(Math.max(0, Math.min(di, da.length)), 0, item);
+    renderAll();
+  }
+
+  function bmFolderBlock(fol, f){
+    var wrap = el("div","folder");
+    var head = el("div","fhead");
+    head.appendChild(el("span","handle",{text:"⠿"}));
+    var icon = el("span","ficon"); icon.innerHTML = FOLDER_SVG; head.appendChild(icon);
+    var fname = el("input","fname",{type:"text",placeholder:"Folder name"}); fname.value = fol.folder;
+    fname.addEventListener("input", function(){ fol.folder = fname.value; updateExport(); });
+    head.appendChild(fname);
+    head.appendChild(el("span","fcount",{text: fol.bookmarklets.length + " bookmarklets"}));
+    head.appendChild(el("span","spacer"));
+    var add = el("button","icon",{title:"Add bookmarklet",text:"+ bookmarklet"});
+    add.onclick = function(){ fol.bookmarklets.push({_id:uid(),name:"",code:"javascript:(function(){\n\n})();",matchSrc:""}); fol._collapsed=false; renderAll(); };
+    head.appendChild(add);
+    var coll = el("button","icon",{title:"Collapse / expand",text: fol._collapsed?"▸":"▾"});
+    coll.onclick = function(){ fol._collapsed = !fol._collapsed; renderAll(); };
+    head.appendChild(coll);
+    var up=el("button","icon",{title:"Move up",text:"↑"}); up.onclick=function(){ bmSwap(-1,f,f-1); };
+    var dn=el("button","icon",{title:"Move down",text:"↓"}); dn.onclick=function(){ bmSwap(-1,f,f+1); };
+    var del=el("button","icon danger",{title:"Delete folder",text:"✕"});
+    del.onclick=function(){ if(!fol.bookmarklets.length || confirm('Delete folder "'+(fol.folder||"")+'" and its '+fol.bookmarklets.length+' bookmarklets?')){ bms.splice(f,1); renderAll(); } };
+    head.appendChild(up); head.appendChild(dn); head.appendChild(del);
+    wrap.appendChild(head);
+
+    var body = el("div","fbody"+(fol._collapsed?" collapsed":""));
+    if(!fol.bookmarklets.length) body.appendChild(el("div","empty",{text:"empty — use + bookmarklet"}));
+    fol.bookmarklets.forEach(function(b,i){ body.appendChild(bmCard(b,f,i)); });
+    wrap.appendChild(body);
+    return wrap;
+  }
+
+  function renderBookmarklets(){
+    var t = document.getElementById("btree");
+    t.innerHTML = "";
+    if(!bms.length) t.appendChild(el("div","empty",{text:"no bookmarklets — add one, or import a config block that has a BOOKMARKLETS library"}));
+    bms.forEach(function(it,idx){ t.appendChild(isBmFolder(it) ? bmFolderBlock(it,idx) : bmCard(it,-1,idx)); });
+    recount();
+  }
+  function recount(){
+    var url = document.getElementById("testUrl").value, n = 0;
+    flatBms().forEach(function(e){ if(e.bm._refresh) e.bm._refresh(); if(matchTest(e.bm.matchSrc, url)) n++; });
+    document.getElementById("recCount").textContent = n + " recommended";
+  }
+
+  function renderAll(){ renderQueries(); renderTransforms(); renderBookmarklets(); updateExport(); }
+
+  function syncPassthruFields(){
+    document.getElementById("pre").value = parts.pre;
+    document.getElementById("mid").value = parts.mid;
+    document.getElementById("suf").value = parts.suf;
+  }
+
+
+  /* ============================================================
+     HOMEPAGE EXPORT  — standalone bulk-launcher page
+     ============================================================ */
+  function homepageModel(){
+    var groups = [], loose = [];
+    data.forEach(function(it){
+      if(isFolder(it)){
+        var qs = it.queries.filter(function(q){ return q.url; })
+          .map(function(q){ return { name:q.name, url:q.url, raw:!!q.raw, transform:xfOut(q.transform), fill:q.fill||null }; });
+        if(qs.length) groups.push({ name: it.folder || "Folder", queries: qs });
+      } else if(it.url){
+        loose.push({ name:it.name, url:it.url, raw:!!it.raw, transform:xfOut(it.transform), fill:it.fill||null });
+      }
+    });
+    if(loose.length) groups.unshift({ name:"General", queries:loose });
+    var tf = {};
+    xforms.forEach(function(x){ if(x.name.trim()) tf[x.name.trim()] = x.code; });
+    return { groups:groups, transforms:tf };
+  }
+
+  function jsonForScript(o){
+    return JSON.stringify(o).replace(/</g,"\\u003c").replace(/-->/g,"--\\u003e");
+  }
+
+  function buildHomepage(){
+    var model = homepageModel();
+    var stamp = new Date().toISOString().slice(0,10);
+    var H = [];
+    H.push('<!DOCTYPE html>');
+    H.push('<html lang="en"><head><meta charset="utf-8">');
+    H.push('<meta name="viewport" content="width=device-width, initial-scale=1">');
+    H.push('<meta name="generator" content="Query Launcher">');
+    H.push('<title>Query Launcher</title>');
+    H.push('<style>');
+    H.push(':root{--bg:#12151b;--panel:#1b1f27;--panel-hi:#232a35;--line:rgba(139,157,178,.16);--line-hi:rgba(139,157,178,.34);--txt:#dfe6ef;--muted:#8a97a8;--faint:#5c6675;--accent:#4db6e6;--accent-dim:rgba(77,182,230,.14);--ok:#4ec98a;--warn:#e0b455;--danger:#e0555f;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}');
+    H.push('*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.45 var(--sans)}');
+    H.push('header{position:sticky;top:0;z-index:9;background:linear-gradient(#12151b,#12151bee);border-bottom:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}');
+    H.push('header h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.02em}header h1 .dot{color:var(--accent)}');
+    H.push('.sub{color:var(--muted);font-size:11.5px;font-family:var(--mono)}.spacer{flex:1 1 auto}');
+    H.push('button{font:inherit;cursor:pointer;border:1px solid var(--line-hi);background:var(--panel-hi);color:var(--txt);border-radius:4px;padding:6px 11px;transition:.12s}');
+    H.push('button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}');
+    H.push('button.primary{border-color:var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:600}');
+    H.push('button.icon{padding:3px 8px;border-color:var(--line);background:transparent;color:var(--muted);font-family:var(--mono)}');
+    H.push('main{max-width:1100px;margin:0 auto;padding:18px;display:flex;flex-direction:column;gap:14px}');
+    H.push('.grp{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}');
+    H.push('.ghead{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--panel-hi);border-bottom:1px solid var(--line);cursor:pointer;user-select:none}');
+    H.push('.ficon{color:var(--accent);display:flex;flex:0 0 auto}');
+    H.push('.gname{font-weight:700;letter-spacing:.02em;flex:0 0 auto}');
+    H.push('.gmeta{font-family:var(--mono);font-size:10.5px;color:var(--faint)}');
+    H.push('.gsel{font-family:var(--mono);font-size:10.5px;color:var(--accent)}');
+    H.push('.chev{font-family:var(--mono);color:var(--muted);transition:transform .12s ease}.chev.open{transform:rotate(90deg);color:var(--accent)}');
+    H.push('.gbody{padding:11px;display:flex;flex-direction:column;gap:10px}.gbody.hidden{display:none}');
+    H.push('textarea{width:100%;min-height:96px;background:#0e1116;color:var(--txt);border:1px solid var(--line);border-radius:5px;font:12px/1.55 var(--mono);padding:9px;resize:vertical}');
+    H.push('textarea:focus{outline:none;border-color:var(--accent)}');
+    H.push('.tlabel{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11.5px}');
+    H.push('.tcount{font-family:var(--mono);color:var(--faint)}');
+    H.push('.qlist{display:flex;flex-direction:column;gap:3px}');
+    H.push('.q{display:flex;align-items:center;gap:9px;padding:5px 8px;border-radius:3px;border-left:2px solid transparent;cursor:pointer;user-select:none}');
+    H.push('.q:hover{background:var(--panel-hi);border-left-color:var(--accent)}');
+    H.push('.q input{accent-color:var(--accent);cursor:pointer}');
+    H.push('.qn{font-weight:600;flex:0 0 auto}');
+    H.push('.qu{font-family:var(--mono);font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}');
+    H.push('.qx{font-family:var(--mono);font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 7px;flex:0 0 auto}');
+    H.push('.qx.qxfill{color:var(--ok);border-color:var(--ok)}');
+    H.push('.bar{position:sticky;bottom:0;background:linear-gradient(#12151bee,#12151b);border-top:1px solid var(--line);padding:11px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}');
+    H.push('.plan{font-family:var(--mono);font-size:12px;color:var(--muted)}.plan b{color:var(--accent);font-weight:600}');
+    H.push('.note{font-size:11px;color:var(--faint);max-width:100%}');
+    H.push('.note.warnbox{color:var(--warn)}');
+    H.push('.via{font-family:var(--mono);font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:999px;padding:2px 9px}');
+    H.push('.via.on{color:var(--ok);border-color:var(--ok)}');
+    H.push('#next{display:none}#next.on{display:inline-block}');
+    H.push('.grp.extra .ghead{background:var(--panel)}');
+    H.push('.xrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.xrow .spacer{flex:1 1 auto}');
+    H.push('button:disabled{opacity:.45;cursor:default}button:disabled:hover{border-color:var(--line-hi);color:var(--txt);background:var(--panel-hi)}');
+    H.push('input.folder{width:180px;background:#0e1116;border:1px solid var(--line);color:var(--txt);border-radius:4px;padding:6px 8px;font:12px var(--mono)}');
+    H.push('input.folder:focus{outline:none;border-color:var(--accent)}');
+    H.push('.dlist{display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto}.dlist:empty{display:none}');
+    H.push('.drow{display:flex;align-items:center;gap:10px;padding:4px 8px;border-left:2px solid var(--line);font:11.5px var(--mono)}');
+    H.push('.dname{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}');
+    H.push('.dstate{flex:0 0 auto;color:var(--faint)}.dstate.running{color:var(--accent)}.dstate.done{color:var(--ok)}');
+    H.push('.dstate.failed{color:var(--danger,#e0555f);max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dstate.stopped{color:var(--muted)}');
+    H.push('input[type=number]{width:72px;background:#0e1116;border:1px solid var(--line);color:var(--txt);border-radius:4px;padding:5px;font:12px var(--mono)}');
+    H.push('.urls{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px;max-height:280px;overflow:auto;display:none}');
+    H.push('.urls.on{display:block}.urls a{display:block;color:var(--accent);font:11.5px/1.7 var(--mono);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}');
+    H.push('.urls a:hover{text-decoration:underline}');
+    H.push('.urls .u-h{color:var(--faint);font:10.5px var(--mono);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.1em}');
+    H.push('.toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel-hi);border:1px solid var(--accent);color:var(--accent);padding:8px 14px;border-radius:6px;opacity:0;transition:.2s;pointer-events:none;font-size:12px;z-index:20}.toast.show{opacity:1}');
+    H.push('</style></head><body>');
+    H.push('<header><h1>Query <span class="dot">Launcher</span></h1>');
+    H.push('<span class="sub">generated ' + stamp + ' \u00b7 launcher 3.6</span>');
+    H.push('<span class="via" id="via" title="How tabs are opened">browser pop-ups</span><span class="spacer"></span>');
+    H.push('<button class="icon" id="expandAll">expand all</button>');
+    H.push('<button class="icon" id="collapseAll">collapse all</button>');
+    H.push('<button class="icon" id="selNone">clear selection</button>');
+    H.push('</header>');
+    H.push('<main id="main"></main>');
+    H.push('<div class="urls" id="urls"></div>');
+    H.push('<div class="bar">');
+    H.push('<span class="plan" id="plan">nothing selected</span><span class="spacer"></span>');
+    H.push('<label class="note" title="Delay between each tab. 0 = open all at once.">stagger <input type="number" id="stagger" value="2000" min="0" max="60000" step="500"> ms</label>');
+    H.push('<button class="icon" id="clearSel">clear selection</button>');
+    H.push('<button class="icon" id="showUrls">show URLs</button>');
+    H.push('<button class="icon" id="copyUrls">copy URLs</button>');
+    H.push('<button id="next" title="Your browser allows one new tab per click">Open next</button>');
+    H.push('<button class="primary" id="run">Open tabs</button>');
+    H.push('</div>');
+    H.push('<div class="toast" id="toast"></div>');
+    H.push('<script>var MODEL = ' + jsonForScript(model) + ';<\/script>');
+    H.push('<script>');
+    H.push(HOMEPAGE_JS);
+    H.push('<\/script></body></html>');
+    return H.join("\n");
+  }
+
+  var HOMEPAGE_JS = [
+'(function(){',
+'  "use strict";',
+'  var FOLDER_SVG = \'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2.2h7A1.5 1.5 0 0 1 19 8.7V17.5A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5z"/><path d="M6.4 12.2h7.2M6.4 14.8h4.6" opacity=".6"/></svg>\';',
+'  // compile the transform sources baked in from the editor',
+'  var TF = {};',
+'  Object.keys(MODEL.transforms || {}).forEach(function(k){',
+'    try { var f = (new Function("return (" + MODEL.transforms[k] + ")"))(); if(typeof f === "function") TF[k] = f; }',
+'    catch(e){ console.warn("transform failed to compile:", k, e); }',
+'  });',
+'  function applyTransform(v, spec){',
+'    if(!spec) return v;',
+'    var names = Array.isArray(spec) ? spec : [spec];',
+'    names.forEach(function(n){ var f = TF[n]; if(typeof f === "function"){ try { v = String(f(v)); } catch(e){} } });',
+'    return v;',
+'  }',
+'  function fill(q, term){',
+'    var v = applyTransform(term, q.transform);',
+'    return String(q.url).split("%s").join(q.raw ? v : encodeURIComponent(v));',
+'  }',
+'  function terms(g){',
+'    return (g._terms || "").split(/\\r?\\n/).map(function(t){ return t.trim(); }).filter(Boolean);',
+'  }',
+'',
+'  var main = document.getElementById("main");',
+'  MODEL.groups.forEach(function(g, gi){',
+'    g._terms = ""; g._open = false;',
+'    var box = document.createElement("div"); box.className = "grp";',
+'    var head = document.createElement("div"); head.className = "ghead";',
+'    var icon = document.createElement("span"); icon.className = "ficon"; icon.innerHTML = FOLDER_SVG;',
+'    var nm = document.createElement("span"); nm.className = "gname"; nm.textContent = g.name;',
+'    var meta = document.createElement("span"); meta.className = "gmeta"; meta.textContent = g.queries.length + " queries";',
+'    var sel = document.createElement("span"); sel.className = "gsel";',
+'    var sp = document.createElement("span"); sp.className = "spacer";',
+'    var all = document.createElement("button"); all.className = "icon"; all.textContent = "all";',
+'    var none = document.createElement("button"); none.className = "icon"; none.textContent = "none";',
+'    var chev = document.createElement("span"); chev.className = "chev"; chev.textContent = "\\u203A";',
+'    head.appendChild(icon); head.appendChild(nm); head.appendChild(meta); head.appendChild(sel);',
+'    head.appendChild(sp); head.appendChild(all); head.appendChild(none); head.appendChild(chev);',
+'    box.appendChild(head);',
+'',
+'    var body = document.createElement("div"); body.className = "gbody hidden";',
+'    var lab = document.createElement("div"); lab.className = "tlabel";',
+'    var labT = document.createElement("span"); labT.textContent = "search terms — one per line";',
+'    var cnt = document.createElement("span"); cnt.className = "tcount";',
+'    lab.appendChild(labT); lab.appendChild(cnt);',
+'    var ta = document.createElement("textarea");',
+'    ta.placeholder = "example.com\\n8.8.8.8\\n46.5197, 6.6323";',
+'    ta.addEventListener("input", function(){ g._terms = ta.value; update(); });',
+'    body.appendChild(lab); body.appendChild(ta);',
+'',
+'    var list = document.createElement("div"); list.className = "qlist";',
+'    g.queries.forEach(function(q){',
+'      q._on = false;',
+'      var row = document.createElement("label"); row.className = "q";',
+'      var cb = document.createElement("input"); cb.type = "checkbox";',
+'      cb.addEventListener("change", function(){ q._on = cb.checked; update(); });',
+'      q._cb = cb;',
+'      var qn = document.createElement("span"); qn.className = "qn"; qn.textContent = q.name || "(unnamed)";',
+'      var qu = document.createElement("span"); qu.className = "qu"; qu.textContent = q.url;',
+'      row.appendChild(cb); row.appendChild(qn);',
+'      if(q.transform){ var qx = document.createElement("span"); qx.className = "qx";',
+'        qx.textContent = Array.isArray(q.transform) ? q.transform.join(" | ") : q.transform; row.appendChild(qx); }',
+'      if(q.fill){ var qf = document.createElement("span"); qf.className = "qx qxfill";',
+'        qf.textContent = "fill \u2192 " + q.fill.input; qf.title = "Types the value into " + q.fill.input + " and submits (needs Query Menu 3.6+)"; row.appendChild(qf); }',
+'      row.appendChild(qu);',
+'      list.appendChild(row);',
+'    });',
+'    body.appendChild(list);',
+'    box.appendChild(body);',
+'    main.appendChild(box);',
+'',
+'    function toggle(open){ g._open = open; body.className = "gbody" + (open ? "" : " hidden"); chev.className = "chev" + (open ? " open" : ""); }',
+'    head.addEventListener("click", function(e){ if(e.target === all || e.target === none) return; toggle(!g._open); });',
+'    all.addEventListener("click", function(e){ e.stopPropagation(); g.queries.forEach(function(q){ q._on = true; q._cb.checked = true; }); update(); });',
+'    none.addEventListener("click", function(e){ e.stopPropagation(); g.queries.forEach(function(q){ q._on = false; q._cb.checked = false; }); update(); });',
+'    g._selEl = sel; g._cntEl = cnt; g._toggle = toggle;',
+'  });',
+'',
+'  // ---------- sections at the end: a plain URL list, and downloads ----------',
+'  var extraToggles = [];',
+'  function section(title, metaText){',
+'    var box = document.createElement("div"); box.className = "grp extra";',
+'    var head = document.createElement("div"); head.className = "ghead";',
+'    var nm = document.createElement("span"); nm.className = "gname"; nm.textContent = title;',
+'    var meta = document.createElement("span"); meta.className = "gmeta"; meta.textContent = metaText;',
+'    var sp = document.createElement("span"); sp.className = "spacer";',
+'    var chev = document.createElement("span"); chev.className = "chev"; chev.textContent = "›";',
+'    head.appendChild(nm); head.appendChild(meta); head.appendChild(sp); head.appendChild(chev);',
+'    var body = document.createElement("div"); body.className = "gbody hidden";   // collapsed until clicked',
+'    box.appendChild(head); box.appendChild(body); main.appendChild(box);',
+'    var open = false;',
+'    function toggle(o){ open = o; body.className = "gbody" + (o ? "" : " hidden"); chev.className = "chev" + (o ? " open" : ""); }',
+'    head.addEventListener("click", function(){ toggle(!open); });',
+'    extraToggles.push(toggle);',
+'    return { body: body, meta: meta };',
+'  }',
+'',
+'  // One URL per line. Blank lines and lines starting with # are skipped; "example.com/x"',
+'  // gets https:// in front; anything else that isn\'t an http(s) address is reported.',
+'  function toHttpUrl(t){',
+'    t = String(t || "").trim().replace(/^[<"\']+|[>"\']+$/g, "");',
+'    if(!t || /\\s/.test(t)) return null;',
+'    if(!/^[a-z][a-z0-9+.-]*:/i.test(t) && /^[^\\/\\s]+\\.[^\\/\\s.]{2,}/.test(t)) t = "https://" + t;',
+'    try { var u = new URL(t); return (u.protocol === "http:" || u.protocol === "https:") ? u.href : null; }',
+'    catch(e){ return null; }',
+'  }',
+'  function parseLines(text, withName){',
+'    var out = [], bad = 0, dup = 0, seen = {};',
+'    String(text || "").split(/\\r?\\n/).forEach(function(line){',
+'      line = line.trim();',
+'      if(!line || line.charAt(0) === "#") return;',
+'      var m = withName ? line.match(/^(\\S+)\\s+(.+)$/) : null;',
+'      var url = toHttpUrl(m ? m[1] : line);',
+'      if(!url){ bad++; return; }',
+'      if(seen[url]){ dup++; return; }',
+'      seen[url] = 1;',
+'      out.push(withName ? { url: url, name: m ? m[2].trim() : "" } : url);',
+'    });',
+'    return { items: out, bad: bad, dup: dup };',
+'  }',
+'  function countText(r, noun){',
+'    var t = r.items.length + " " + noun + (r.items.length === 1 ? "" : "s");',
+'    if(r.bad) t += " · " + r.bad + " not a web address";',
+'    if(r.dup) t += " · " + r.dup + " duplicate" + (r.dup === 1 ? "" : "s") + " skipped";',
+'    return t;',
+'  }',
+'',
+'  // --- Open URLs ---',
+'  var su = section("Open URLs", "opens each address in a new tab");',
+'  var uta = document.createElement("textarea");',
+'  uta.placeholder = "https://example.com/page\\nnews.example.org\\n# lines starting with # are skipped";',
+'  var urow = document.createElement("div"); urow.className = "xrow";',
+'  var ucnt = document.createElement("span"); ucnt.className = "tcount";',
+'  var ugo = document.createElement("button"); ugo.className = "primary"; ugo.textContent = "Open tabs";',
+'  urow.appendChild(ucnt); urow.appendChild(document.createElement("span")).className = "spacer"; urow.appendChild(ugo);',
+'  su.body.appendChild(uta); su.body.appendChild(urow);',
+'  function uUpdate(){',
+'    var r = parseLines(uta.value, false);',
+'    ucnt.textContent = uta.value.trim() ? countText(r, "URL") : "one address per line";',
+'    ugo.textContent = r.items.length ? "Open " + r.items.length + " tab" + (r.items.length === 1 ? "" : "s") : "Open tabs";',
+'    ugo.disabled = !r.items.length;',
+'  }',
+'  uta.addEventListener("input", uUpdate); uUpdate();',
+'  ugo.addEventListener("click", function(){',
+'    var r = parseLines(uta.value, false);',
+'    if(!r.items.length){ toast("Add at least one web address."); return; }',
+'    openUrls(r.items, null);',
+'  });',
+'',
+'  // --- Downloads ---',
+'  var sd = section("Downloads", "saves each file to your Downloads folder");',
+'  var dta = document.createElement("textarea");',
+'  dta.placeholder = "https://example.com/report.pdf\\nhttps://example.com/data.csv  my-name.csv\\n# a name after the address renames the file";',
+'  var drow = document.createElement("div"); drow.className = "xrow";',
+'  var dcnt = document.createElement("span"); dcnt.className = "tcount";',
+'  var dfold = document.createElement("input"); dfold.type = "text"; dfold.className = "folder";',
+'  dfold.placeholder = "subfolder (optional)";',
+'  dfold.title = "Save into this folder inside Downloads. Needs Tampermonkey\'s Download Mode set to “Browser API”.";',
+'  var dgo = document.createElement("button"); dgo.className = "primary"; dgo.textContent = "Download";',
+'  drow.appendChild(dcnt); drow.appendChild(document.createElement("span")).className = "spacer";',
+'  drow.appendChild(dfold); drow.appendChild(dgo);',
+'  var dlist = document.createElement("div"); dlist.className = "dlist";',
+'  var dnote = document.createElement("div"); dnote.className = "note";',
+'  sd.body.appendChild(dta); sd.body.appendChild(drow); sd.body.appendChild(dnote); sd.body.appendChild(dlist);',
+'  function dUpdate(){',
+'    var r = parseLines(dta.value, true);',
+'    dcnt.textContent = dta.value.trim() ? countText(r, "file") : "one file address per line";',
+'    dgo.textContent = r.items.length ? "Download " + r.items.length + " file" + (r.items.length === 1 ? "" : "s") : "Download";',
+'    dgo.disabled = !r.items.length;',
+'  }',
+'  dta.addEventListener("input", function(){ dPending = []; dUpdate(); }); dUpdate();',
+'',
+'  // a file name from the address: the last part of the path',
+'  function fileNameFor(url, i){',
+'    var n = "";',
+'    try { n = decodeURIComponent(new URL(url).pathname.split("/").pop() || ""); } catch(e){}',
+'    return n || ("download-" + (i + 1));',
+'  }',
+'  var dRows = {};                       // url -> status element',
+'  function dShow(items){',
+'    dlist.innerHTML = ""; dRows = {};',
+'    items.forEach(function(it){',
+'      var row = document.createElement("div"); row.className = "drow";',
+'      var nm = document.createElement("span"); nm.className = "dname"; nm.textContent = it.name; nm.title = it.url;',
+'      var st = document.createElement("span"); st.className = "dstate"; st.textContent = "waiting";',
+'      row.appendChild(nm); row.appendChild(st); dlist.appendChild(row);',
+'      dRows[it.url] = st;',
+'    });',
+'  }',
+'  function dSet(url, state, text){',
+'    var st = dRows[url]; if(!st) return;',
+'    st.textContent = text || state; st.className = "dstate " + state;',
+'    if(text && state === "failed") st.title = text;',
+'  }',
+'  window.addEventListener("query-launcher:download-status", function(ev){',
+'    var d; try { d = JSON.parse(ev.detail); } catch(e){ return; }',
+'    if(d.state === "progress") dSet(d.url, "running", d.pct != null ? d.pct + "%" : "downloading");',
+'    else if(d.state === "done") dSet(d.url, "done", "saved");',
+'    else if(d.state === "failed") dSet(d.url, "failed", d.error || "failed");',
+'    else if(d.state === "started") dSet(d.url, "running", "downloading");',
+'    else if(d.state === "stopped") dSet(d.url, "stopped", "not started");',
+'  });',
+'',
+'  // without Query Menu: one download per click (the browser decides whether it saves or shows the file)',
+'  var dPending = [];',
+'  function dNextLabel(){ dgo.textContent = "Download next (" + dPending.length + " left)"; }',
+'  function dDirect(it){',
+'    var a = document.createElement("a");',
+'    a.href = it.url; a.download = it.name; a.target = "_blank"; a.rel = "noopener";',
+'    document.body.appendChild(a); a.click(); a.remove();',
+'    dSet(it.url, "done", "sent to the browser");',
+'  }',
+'  dgo.addEventListener("click", function(){',
+'    if(dPending.length){                         // continuing a one-per-click run',
+'      dDirect(dPending.shift());',
+'      if(dPending.length) dNextLabel(); else { dUpdate(); toast("All files sent to the browser."); }',
+'      return;',
+'    }',
+'    var r = parseLines(dta.value, true);',
+'    if(!r.items.length){ toast("Add at least one file address."); return; }',
+'    var items = r.items.map(function(it, i){ return { url: it.url, name: it.name || fileNameFor(it.url, i) }; });',
+'    dShow(items);',
+'    var gap = parseInt(document.getElementById("stagger").value, 10) || 0;',
+'    if(bridge()){',
+'      var accepted = 0;',
+'      function onAcc(ev){ accepted = parseInt(ev.detail, 10) || 0; }',
+'      window.addEventListener("query-launcher:accepted", onAcc);',
+'      window.dispatchEvent(new CustomEvent("query-launcher:download", { detail: JSON.stringify({',
+'        items: items, gap: gap, folder: dfold.value.trim() }) }));',
+'      window.removeEventListener("query-launcher:accepted", onAcc);',
+'      if(accepted){',
+'        dnote.className = "note"; dnote.textContent = "";',
+'        toast("Downloading " + accepted + " file" + (accepted === 1 ? "" : "s") + " through Query Menu" + (gap ? ", one every " + gap + " ms" : "") + ".");',
+'        return;',
+'      }',
+'      if(bridge() && !accepted){',
+'        dnote.className = "note warnbox";',
+'        dnote.textContent = "Query Menu is here but didn’t take the downloads. Update it to version 3.3 or later.";',
+'      }',
+'    }',
+'    // fallback',
+'    dPending = items.slice(1);',
+'    dDirect(items[0]);',
+'    if(dPending.length){',
+'      dNextLabel();',
+'      dnote.className = "note warnbox";',
+'      dnote.textContent = "Without Query Menu 3.3+ the browser allows one download per click: click “Download next” for each file. Files from other sites keep their own names, ignore the subfolder, and may open in a tab instead of saving.";',
+'    }',
+'  });',
+'',
+'  function plan(){',
+'    var out = [];',
+'    MODEL.groups.forEach(function(g){',
+'      var ts = terms(g), on = g.queries.filter(function(q){ return q._on; });',
+'      if(!ts.length || !on.length) return;',
+'      out.push({ group:g.name, items: [].concat.apply([], ts.map(function(t){',
+'        return on.map(function(q){ return q.fill',
+'          ? { label: q.name + "  ·  " + t, url: q.url, fill: q.fill, value: applyTransform(t, q.transform) }',
+'          : { label: q.name + "  ·  " + t, url: fill(q, t) }; });',
+'      })) });',
+'    });',
+'    return out;',
+'  }',
+'',
+'  function update(){',
+'    MODEL.groups.forEach(function(g){',
+'      var ts = terms(g), on = g.queries.filter(function(q){ return q._on; }).length;',
+'      g._cntEl.textContent = ts.length + (ts.length === 1 ? " term" : " terms");',
+'      g._selEl.textContent = on ? on + " selected" : "";',
+'    });',
+'    var p = plan(), total = p.reduce(function(a,b){ return a + b.items.length; }, 0);',
+'    var qs = MODEL.groups.reduce(function(a,g){ return a + g.queries.filter(function(q){return q._on;}).length; }, 0);',
+'    var tt = MODEL.groups.reduce(function(a,g){ return a + (g.queries.some(function(q){return q._on;}) ? terms(g).length : 0); }, 0);',
+'    document.getElementById("plan").innerHTML = total',
+'      ? "<b>" + total + "</b> tabs  =  " + qs + " queries x " + tt + " terms"',
+'      : "nothing selected";',
+'    renderUrls(p);',
+'  }',
+'',
+'  function renderUrls(p){',
+'    var box = document.getElementById("urls");',
+'    if(!box.classList.contains("on")) return;',
+'    box.innerHTML = "";',
+'    p.forEach(function(gr){',
+'      var h = document.createElement("div"); h.className = "u-h"; h.textContent = gr.group; box.appendChild(h);',
+'      gr.items.forEach(function(it){',
+'        var a = document.createElement("a"); a.href = it.url; a.target = "_blank"; a.rel = "noopener";',
+'        a.textContent = it.label + "  ->  " + it.url + (it.fill ? "   (fills " + it.fill.input + " with \u201c" + it.value + "\u201d)" : ""); box.appendChild(a);',
+'      });',
+'    });',
+'    if(!p.length) box.textContent = "Select at least one query and enter at least one term.";',
+'  }',
+'',
+'  function toast(t){ var e = document.getElementById("toast"); e.textContent = t; e.classList.add("show"); setTimeout(function(){ e.classList.remove("show"); }, 2200); }',
+'',
+'  // Opening tabs. A browser lets a page open only one new tab per click; the rest are',
+'  // blocked as pop-ups. The Query Menu userscript (Tampermonkey) has no such limit, so',
+'  // when it is running on this page the whole list is handed to it.',
+'  function bridge(){ return document.documentElement.getAttribute("data-query-menu"); }',
+'  function showVia(){',
+'    var v = document.getElementById("via"), b = bridge();',
+'    v.textContent = b ? "via Query Menu" : "browser pop-ups";',
+'    v.className = "via" + (b ? " on" : "");',
+'    v.title = b ? "Tabs, downloads and fill queries go through the Query Menu userscript: no pop-up limit, with a Stop button."',
+'               : "Your browser may allow only one new tab or download per click, and fill queries need Query Menu. Install Query Menu 3.6+ and allow it access to file URLs.";',
+'  }',
+'  var pending = [];',
+'  function updateNext(){',
+'    var n = document.getElementById("next");',
+'    n.textContent = "Open next (" + pending.length + " left)";',
+'    n.className = pending.length ? "on" : "";',
+'  }',
+'  document.getElementById("next").addEventListener("click", function(){',
+'    var u = pending.shift();',
+'    if(u && !window.open(u, "_blank")){ pending.unshift(u); toast("Still blocked. Allow pop-ups for this page."); }',
+'    updateNext();',
+'  });',
+'  function handOff(urls, gap){',
+'    if(!bridge() || !urls.length) return 0;',
+'    var accepted = 0;',
+'    function onAcc(ev){ accepted = parseInt(ev.detail, 10) || 0; }',
+'    window.addEventListener("query-launcher:accepted", onAcc);',
+'    window.dispatchEvent(new CustomEvent("query-launcher:open", { detail: JSON.stringify({ urls: urls, gap: gap }) }));',
+'    window.removeEventListener("query-launcher:accepted", onAcc);',
+'    return accepted;',
+'  }',
+'  function handOffFill(items, gap){',
+'    if(!bridge() || !items.length) return 0;',
+'    var accepted = 0;',
+'    function onAcc(ev){ accepted = parseInt(ev.detail, 10) || 0; }',
+'    window.addEventListener("query-launcher:accepted", onAcc);',
+'    window.dispatchEvent(new CustomEvent("query-launcher:fill", { detail: JSON.stringify({ items: items, gap: gap }) }));',
+'    window.removeEventListener("query-launcher:accepted", onAcc);',
+'    return accepted;',
+'  }',
+'  function blockedNotice(blocked, total){',
+'    pending = blocked; updateNext();',
+'    toast("Your browser blocked " + blocked.length + " of " + total + " tabs. Click “Open next” for each, or allow pop-ups for this page.");',
+'  }',
+'',
+'  // Open a list of tabs: through Query Menu when it\'s here, else with the browser',
+'  // (which may block all but the first). onBlocked runs when the browser blocked some.',
+'  function openUrls(urls, onBlocked){',
+'    var gap = parseInt(document.getElementById("stagger").value, 10) || 0;',
+'    pending = []; updateNext();',
+'    var sent = handOff(urls, gap);',
+'    if(sent){',
+'      toast("Opening " + sent + " tab" + (sent === 1 ? "" : "s") + " through Query Menu" + (gap ? ", one every " + gap + " ms" : "") + ". Stop it from the box in the corner.");',
+'      return;',
+'    }',
+'    var blocked = [];',
+'    function done(){ if(blocked.length){ blockedNotice(blocked, urls.length); if(onBlocked) onBlocked(); } }',
+'    if(gap > 0){',
+'      urls.forEach(function(u, i){',
+'        setTimeout(function(){',
+'          if(!window.open(u, "_blank")) blocked.push(u);',
+'          if(i === urls.length - 1) done();',
+'        }, i * gap);',
+'      });',
+'      toast("Opening " + urls.length + " tabs, one every " + gap + " ms...");',
+'    } else {',
+'      urls.forEach(function(u){ if(!window.open(u, "_blank")) blocked.push(u); });',
+'      if(blocked.length) done(); else toast("Opened " + urls.length + " tab" + (urls.length === 1 ? "" : "s") + ".");',
+'    }',
+'  }',
+'',
+'  document.getElementById("run").addEventListener("click", function(){',
+'    var p = plan(), tabs = [], fills = [];',
+'    p.forEach(function(gr){ gr.items.forEach(function(it){',
+'      if(it.fill) fills.push({ url: it.url, value: it.value, fill: it.fill }); else tabs.push(it.url); }); });',
+'    if(!tabs.length && !fills.length){ toast("Nothing to run — select queries and add terms."); return; }',
+'    var gap = parseInt(document.getElementById("stagger").value, 10) || 0;',
+'    pending = []; updateNext();',
+'    if(bridge()){',
+'      var a = handOff(tabs, gap), b = handOffFill(fills, gap);',
+'      if(fills.length && !b){',
+'        document.getElementById("urls").classList.add("on"); renderUrls(p);',
+'        toast("Your Query Menu is too old for launcher fill queries — update to 3.6+. Opened " + a + " plain tab(s).");',
+'      } else {',
+'        var n = a + b;',
+'        toast("Opening " + n + " tab" + (n===1?"":"s") + " through Query Menu" + (gap?", one every "+gap+" ms":"") + ". Stop it from the box in the corner.");',
+'      }',
+'      return;',
+'    }',
+'    if(tabs.length) openUrls(tabs, function(){ document.getElementById("urls").classList.add("on"); renderUrls(p); });',
+'    if(fills.length){',
+'      document.getElementById("urls").classList.add("on"); renderUrls(p);',
+'      toast(fills.length + " fill quer" + (fills.length===1?"y":"ies") + " need Query Menu and were skipped" + (tabs.length?"; plain tabs opened":"") + ". See the list below.");',
+'    }',
+'  });',
+'  showVia(); setTimeout(showVia, 300);',
+'',
+'  document.getElementById("showUrls").addEventListener("click", function(){',
+'    var box = document.getElementById("urls"); box.classList.toggle("on"); renderUrls(plan());',
+'  });',
+'  document.getElementById("copyUrls").addEventListener("click", function(){',
+'    var p = plan(), urls = [];',
+'    p.forEach(function(gr){ gr.items.forEach(function(it){ urls.push(it.url); }); });',
+'    if(!urls.length){ toast("Nothing to copy."); return; }',
+'    var txt = urls.join("\\n");',
+'    if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ toast("Copied " + urls.length + " URLs."); },',
+'      function(){ toast("Copy failed - use \\u201cshow URLs\\u201d."); });',
+'    else toast("Copy not available - use \\u201cshow URLs\\u201d.");',
+'  });',
+'  document.getElementById("expandAll").addEventListener("click", function(){ MODEL.groups.forEach(function(g){ g._toggle(true); }); extraToggles.forEach(function(t){ t(true); }); });',
+'  document.getElementById("collapseAll").addEventListener("click", function(){ MODEL.groups.forEach(function(g){ g._toggle(false); }); extraToggles.forEach(function(t){ t(false); }); });',
+'  function clearSelection(){',
+'    MODEL.groups.forEach(function(g){ g.queries.forEach(function(q){ q._on = false; q._cb.checked = false; }); });',
+'    update(); toast("Selection cleared.");',
+'  }',
+'  document.getElementById("selNone").addEventListener("click", clearSelection);',
+'  document.getElementById("clearSel").addEventListener("click", clearSelection);',
+'',
+'  update();',
+'})();'
+  ].join("\n");
+
+  /* ============================================================
+     WIRING
+     ============================================================ */
+  [].forEach.call(document.querySelectorAll(".tab"), function(tab){
+    tab.onclick = function(){
+      [].forEach.call(document.querySelectorAll(".tab"), function(t){ t.classList.remove("on"); });
+      [].forEach.call(document.querySelectorAll(".pane"), function(p){ p.classList.remove("on"); });
+      tab.classList.add("on");
+      document.getElementById(tab.getAttribute("data-pane")).classList.add("on");
+    };
+  });
+
+  document.getElementById("addQuery").onclick = function(){
+    data.push({_id:uid(),name:"",url:"",raw:false,transform:"",on: qFilter === "all" ? "both" : qFilter}); renderAll(); };
+  document.getElementById("addFolder").onclick = function(){
+    data.push({_id:uid(),folder:"New folder",_collapsed:false,on: qFilter === "all" ? "both" : qFilter,queries:[]}); renderAll(); };
+  [].forEach.call(document.querySelectorAll("#qfilter button"), function(b){
+    b.onclick = function(){
+      qFilter = b.getAttribute("data-f");
+      [].forEach.call(document.querySelectorAll("#qfilter button"), function(x){ x.classList.toggle("on", x === b); });
+      renderQueries();
+    };
+  });
+  document.getElementById("addXf").onclick = function(){
+    xforms.push({_id:uid(),name:"my transform",comment:"",code:"function (v) { return String(v); }"}); renderAll(); };
+  document.getElementById("addXfCoord").onclick = function(){
+    xforms.push({_id:uid(), name:"lat,lon -> lon,lat", comment:'"46.5197, 6.6323"  ->  "6.6323,46.5197"',
+      code:"function (v) {\n    const m = String(v).trim().match(/^(-?\\d+(?:\\.\\d+)?)\\s*[,;\\s]\\s*(-?\\d+(?:\\.\\d+)?)$/);\n    return m ? m[2] + ',' + m[1] : v;\n}"});
+    renderAll(); };
+  document.getElementById("clearAll").onclick = function(){
+    if(confirm("Clear queries, transforms and bookmarklets?")){ data=[]; xforms=[]; bms=[]; parts={mode:"queries",pre:"",mid:"\n",bmGap:"",suf:"",hadBms:false,source:""}; syncPassthruFields(); renderAll(); } };
+
+  document.getElementById("importBtn").onclick = function(){ doImport(false); };
+  document.getElementById("importReplace").onclick = function(){
+    if(!data.length && !xforms.length){ doImport(true); return; }
+    if(confirm("Discard the loaded queries and transforms, and import this block instead?")) doImport(true);
+  };
+  document.getElementById("optScope").addEventListener("change", updateExport);
+  document.getElementById("optMarkers").addEventListener("change", updateExport);
+  document.getElementById("optIndent").addEventListener("change", updateExport);
+  document.getElementById("testVal").addEventListener("input", retest);
+  document.getElementById("testUrl").addEventListener("input", recount);
+  document.getElementById("addBm").onclick = function(){ bms.push({_id:uid(),name:"",code:"javascript:(function(){\n\n})();",matchSrc:""}); renderAll(); };
+  document.getElementById("addBmFolder").onclick = function(){ bms.push({_id:uid(),folder:"New folder",_collapsed:false,bookmarklets:[]}); renderAll(); };
+  ["pre","mid","suf"].forEach(function(id){
+    document.getElementById(id).addEventListener("input", function(){
+      parts[id] = document.getElementById(id).value; updateExport(); });
+  });
+
+  function toast(t){ var e=document.getElementById("toast"); e.textContent=t; e.classList.add("show"); setTimeout(function(){e.classList.remove("show");},1400); }
+  document.getElementById("copyBtn").onclick = function(){
+    var out=document.getElementById("out"); out.select();
+    navigator.clipboard.writeText(out.value).then(function(){toast("Copied to clipboard");}, function(){ document.execCommand("copy"); toast("Copied"); });
+  };
+  document.getElementById("homeBtn").onclick = function(){
+    if(!data.length){ toast("Add or import some queries first."); return; }
+    var html = buildHomepage();
+    var blob = new Blob([html], {type:"text/html"});
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "query-launcher.html"; a.click(); URL.revokeObjectURL(a.href);
+    toast("Homepage exported");
+  };
+
+  document.getElementById("downloadBtn").onclick = function(){
+    var blob=new Blob([document.getElementById("out").value],{type:"text/plain"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="query-config.txt"; a.click(); URL.revokeObjectURL(a.href);
+  };
+
+  /* ---- sample ---- */
+  document.getElementById("loadSample").onclick = function(){
+    document.getElementById("importText").value =
+[ "    // ============================================================",
+  "    // ============  CONFIGURE YOUR QUERIES HERE  =================",
+  "    // ============================================================",
+  "    //",
+  "    // Queries can live at the top level or inside a folder.",
+  "    // on: 'text' | 'url' | 'both'. A folder's on is the default for its queries.",
+  "    //",
+  "    const QUERIES = [",
+  "        { name: 'Wikipedia',      url: 'https://en.wikipedia.org/w/index.php?search=%s', on: 'text' },",
+  "        { name: 'Google search',  url: 'https://www.google.com/search?q=%s', on: 'both' },",
+  "        { name: 'Wayback Machine', url: 'https://web.archive.org/web/*/%s', raw: true, on: 'url' },",
+  "        {",
+  "            folder: 'Coordinates',",
+  "            on: 'text',",
+  "            queries: [",
+  "                { name: 'OSM (lon,lat)', url: 'https://www.openstreetmap.org/search?query=%s', transform: 'lat,lon -> lon,lat' },",
+  "            ],",
+  "        },",
+  "        {",
+  "            // FILL QUERIES: open a plain page, type the value into a box, then submit.",
+  "            // The value never appears in the URL. Replace the url and selectors with a",
+  "            // real site (right-click its search box -> Inspect to read the id or name).",
+  "            folder: 'Fill examples',",
+  "            on: 'text',",
+  "            queries: [",
+  "                // type into the box, then CLICK the search button",
+  "                { name: 'Search + click button', url: 'https://example.com/',",
+  "                  fill: { input: '#searchbox', button: 'button[type=\"submit\"]', submit: 'click' } },",
+  "                // type into the box, then SUBMIT its form (no button needed)",
+  "                { name: 'Search + submit form',  url: 'https://example.com/',",
+  "                  fill: { input: 'input[name=\"q\"]', submit: 'form' } },",
+  "                // type into the box, then press ENTER",
+  "                { name: 'Search + press Enter',  url: 'https://example.com/',",
+  "                  fill: { input: 'input[type=\"search\"]', submit: 'enter' } },",
+  "            ],",
+  "        },",
+  "    ];",
+  "",
+  "    // ---- VALUE TRANSFORMATIONS ----",
+  "    const TRANSFORMS = {",
+  "        // \"46.5197, 6.6323\"  ->  \"6.6323,46.5197\"",
+  "        'lat,lon -> lon,lat': function (v) {",
+  "            const m = String(v).trim().match(/^(-?\\d+(?:\\.\\d+)?)\\s*[,;\\s]\\s*(-?\\d+(?:\\.\\d+)?)$/);",
+  "            return m ? m[2] + ',' + m[1] : v;",
+  "        },",
+  "        'trim': function (v) { return String(v).trim(); },",
+  "    };",
+  "",
+  "    const URL_PARTS = [",
+  "        { label: 'Full URL',  value: (u) => u.href },",
+  "        { label: 'Domain',    value: (u) => baseDomain(u.hostname) },",
+  "    ];",
+  "",
+  "    const MODIFIER          = 'ctrlKey';",
+  "    const HANDLE_TEXT       = true;",
+  "    const COLLAPSE_WHITESPACE = true;",
+  "    const FOLDER_INTERVAL_MS      = 2000;",
+  "    //",
+  "    // ============================================================",
+  "    // ==============  END OF CONFIGURATION  ======================",
+  "    // ============================================================" ].join("\n");
+    document.getElementById("importDetails").open = true;
+    doImport(true);
+  };
+
+  syncPassthruFields();
+  renderAll();
+})();
+</script>
+</body>
+</html>
