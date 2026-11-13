@@ -259,6 +259,7 @@
     // 53 OSINT bookmarklets, grouped as in the source bookmark file.
     // Attribution/branding text stripped; windows are non-draggable. The userscript
     // restyles each window to the menu theme, pins it top-right and adds a close button.
+    // This provided bookmarklet library was built out of https://tools.myosint.training/ --> Might not be the most up to date version.
     const BOOKMARKLETS = [
         {
             folder: 'Social Media / Misc',
