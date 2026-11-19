@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Query Menu
 // @namespace    http://tampermonkey.net/
-// @version      3.6
+// @version      3.8
 // @description  Ctrl+right-click (or Alt+Q) on selected text, a link, a selected URL or the page to run configurable %s queries. Each query runs on text, on a URL, or both. Folders fire every query at an interval. Includes a bookmarklet library with per-site recommendations. Hardened against sites that block or hide custom menus.
 // @author       You
 // @match        *://*/*
@@ -15,15 +15,17 @@
 // @grant        GM_deleteValue
 // @connect      *
 // @run-at       document-start
-// @noframes
 // ==/UserScript==
 
 // Replaces "Text Query Menu" and "URL Query Menu". Disable or uninstall both of them,
 // otherwise one Ctrl+right-click opens two menus.
 //
-// @noframes keeps this out of ad/embed iframes: the menu is useless there, and it
-// avoids re-parsing the ~500 KB bookmarklet library once per frame. (Trade-off: text
-// selected inside an embedded frame doesn't open the menu.)
+// The script also runs inside <iframe>s, so text or a link selected in an embedded
+// frame opens the menu too (the menu appears within that frame). The bookmarklet
+// library, the launcher bridge and the fill hand-off all belong to the top page and
+// are skipped in frames. Turn frame support off with RUN_IN_FRAMES = false below, which
+// restores the old top-page-only behaviour. Compiling the whole file in each frame costs
+// about a millisecond, so this is cheap even on pages with many frames.
 //
 // @match file:///* lets the script work on local pages, and lets the Query Launcher page
 // (exported from the Query Library Editor) open all its tabs and download its files through
@@ -196,7 +198,7 @@
         'strip newlines': function (v) { return String(v).replace(/\s*\n\s*/g, ' '); },
         'quote':          function (v) { return '"' + String(v).replace(/"/g, '') + '"'; },
         'first line':     function (v) { return String(v).split(/\n/)[0].trim(); },
-
+        
         // --- URL helpers ---
         'strip scheme':   function (v) { return String(v).replace(/^[a-z][a-z0-9+.-]*:\/\//i, ''); },
         'strip www':      function (v) { return String(v).replace(/^(https?:\/\/)?www\./i, '$1'); },
@@ -219,6 +221,8 @@
     const HANDLE_SELECTION  = true;   // selected text that is a URL -> URL queries for it
     const HANDLE_PAGE       = true;   // empty page area         -> URL queries for this page + bookmarklets
     const EXTRACT_URL_FROM_TEXT = true; // selected text containing exactly one URL -> also offer URL queries for it
+    const RUN_IN_FRAMES     = true;   // also run inside <iframe>s (false = top page only, like the old @noframes)
+    const FRAME_MIN_PX      = 120;    // skip frames smaller than this (either side) — ad / tracking pixels
     const HOTKEY            = 'Alt+Q'; // opens the menu without a right-click: for the selection, else the link
                                        // under the mouse, else the page. Pressing it again closes the menu.
                                        // Modifiers: Ctrl / Alt / Shift / Meta, then a letter or digit. null = off.
@@ -247,7 +251,7 @@
                                   // websites can't.
 
     // ---- troubleshooting ----
-    const DEBUG = false; // true = log every step to the browser console ([QueryMenu] …), to see
+    const DEBUG = true; // true = log every step to the browser console ([QueryMenu] …), to see
                          // why the menu didn't appear on a particular site
     //
     // ============================================================
@@ -588,6 +592,15 @@
 
 
     if (!Array.isArray(QUERIES) || QUERIES.length === 0) return;
+
+    // Are we the top page, or inside a frame? The bookmarklet library, the launcher
+    // bridge and the fill hand-off are top-page only (see the three IS_TOP checks below).
+    const IS_TOP = (function () { try { return window.top === window.self; } catch (_) { return false; } })();
+    if (!IS_TOP) {
+        if (!RUN_IN_FRAMES) return;                                   // opt-out: behave like @noframes
+        // a frame too small to show a menu is an ad / tracking pixel — don't wire into it
+        if (Math.min(window.innerWidth || 0, window.innerHeight || 0) < FRAME_MIN_PX) return;
+    }
 
     // Small (non-exhaustive) list of two-level public suffixes so that
     // "sub.example.co.uk" -> "example.co.uk" rather than "co.uk".
@@ -1530,6 +1543,49 @@
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
     }
+    // rich-text editors (ProseMirror, Lexical, Slate, Quill: Mistral, ChatGPT, Claude...) ignore .value.
+    // They only accept text that arrives like a real paste or real typing, so simulate that.
+    function insertIntoEditable(el, value) {
+        try { el.focus(); } catch (_) {}
+        try {                                           // select what is already there, so it gets replaced
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        } catch (_) {}
+        try {                                           // 1) a paste event keeps line breaks
+            const dt = new DataTransfer();
+            dt.setData('text/plain', value);
+            el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        } catch (_) {}
+        if (!el.textContent.trim()) {                   // 2) fall back to simulated typing
+            try { document.execCommand('insertText', false, value); } catch (_) {}
+        }
+        if (!el.textContent.trim()) {                   // 3) last resort: an InputEvent the editor may read
+            try { el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: value, bubbles: true, cancelable: true })); } catch (_) {}
+        }
+        return !!el.textContent.trim();
+    }
+    // the editor can appear before the site's code has wired it up, so retry until the text sticks
+    function fillEditable(el, value) {
+        return new Promise((resolve) => {
+            const started = Date.now();
+            const attempt = () => {
+                const live = el.isConnected ? el : (document.querySelector(el.__qmSelector || '') || el);
+                el = live;
+                if (insertIntoEditable(el, value)) {
+                    // re-check shortly after: hydration can wipe the first insert
+                    setTimeout(() => {
+                        if (el.isConnected && el.textContent.trim()) return resolve(el);
+                        if (Date.now() - started < FILL_WAIT_MS) return attempt();
+                        resolve(el);
+                    }, 250);
+                } else if (Date.now() - started < FILL_WAIT_MS) {
+                    setTimeout(attempt, 250);
+                } else resolve(el);
+            };
+            attempt();
+        });
+    }
     function pressEnter(el) {
         ['keydown', 'keypress', 'keyup'].forEach((type) => {
             el.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
@@ -1549,18 +1605,27 @@
             if (!input) { dbg('autofill: search box not found:', f.input); return; }
             dbg('autofill: box found, typing value (len ' + String(rec.value).length + ')');
             try { input.focus(); } catch (_) {}
-            setFieldValue(input, rec.value);
-            dbg('autofill: box value now = ' + JSON.stringify(input.value).slice(0,40));
             const mode = f.submit || (f.button ? 'click' : 'form');
-            setTimeout(() => {
+            const submit = (box) => setTimeout(() => {
                 if (mode === 'click' && f.button) {
                     waitForEl(f.button, FILL_WAIT_MS).then((btn) => {
                         if (btn) { dbg('autofill: clicking', f.button); btn.click(); }
-                        else { dbg('autofill: button not found, submitting the form instead'); submitFormOf(input); }
+                        else { dbg('autofill: button not found, submitting the form instead'); submitFormOf(box); }
                     });
-                } else if (mode === 'enter') { dbg('autofill: pressing Enter'); pressEnter(input); }
-                else { dbg('autofill: submitting the form'); submitFormOf(input); }
+                } else if (mode === 'enter') { dbg('autofill: pressing Enter'); pressEnter(box); }
+                else { dbg('autofill: submitting the form'); submitFormOf(box); }
             }, FILL_SUBMIT_MS);
+            if (input.isContentEditable) {
+                input.__qmSelector = f.input;
+                fillEditable(input, rec.value).then((box) => {
+                    dbg('autofill: editor text now = ' + JSON.stringify(box.textContent).slice(0,40));
+                    submit(box);
+                });
+            } else {
+                setFieldValue(input, rec.value);
+                dbg('autofill: box value now = ' + JSON.stringify(input.value).slice(0,40));
+                submit(input);
+            }
         });
     }
     // on every page: is there a value waiting for this exact page? take one, run it.
@@ -1945,7 +2010,7 @@
         }
 
         // bookmarklets: only for the page context (not links / selections)
-        if (currentType === 'page' && typeof BOOKMARKLETS !== 'undefined' &&
+        if (currentType === 'page' && IS_TOP && typeof BOOKMARKLETS !== 'undefined' &&
             Array.isArray(BOOKMARKLETS) && BOOKMARKLETS.length) {
             try { buildBookmarkletSection(menu); }
             catch (e) { console.error('[QueryMenu] bookmarklet section failed:', e); }
@@ -2422,9 +2487,9 @@
     // 5) Query Launcher hand-off. The launcher page can only open one tab per click
     //    (pop-up blocker); handed to us, every tab opens through GM_openInTab instead.
     //    Accepted only from a launcher page saved on this computer, during a click.
-    if (LAUNCHER_BRIDGE && location.protocol === 'file:') {
+    if (LAUNCHER_BRIDGE && IS_TOP && location.protocol === 'file:') {
         // tells the launcher page we're here (<html> may not exist yet at document-start)
-        const markLauncher = () => { try { document.documentElement.setAttribute('data-query-menu', '3.6'); } catch (_) {} };
+        const markLauncher = () => { try { document.documentElement.setAttribute('data-query-menu', '3.7'); } catch (_) {} };
         if (document.documentElement) markLauncher();
         document.addEventListener('DOMContentLoaded', markLauncher);
         window.addEventListener('query-launcher:open', function (e) {
@@ -2558,7 +2623,7 @@
         } catch (_) {}
     }
 
-    try { consumePendingFill(); } catch (e) { dbg('autofill check failed', e); }
+    if (IS_TOP) { try { consumePendingFill(); } catch (e) { dbg('autofill check failed', e); } }
 
     dbg('ready', { hotkey: HOTKEY, topLayer: HAS_POPOVER, modifier: MODIFIER });
 })();
